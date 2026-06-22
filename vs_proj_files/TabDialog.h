@@ -3,6 +3,11 @@
 
 #include "afxdialogex.h"
 
+class CPromptEditorDlg;
+
+// ============================================================
+// CTabDialog — タブ内共通ダイアログ
+// ============================================================
 class CTabDialog : public CDialog
 {
 public:
@@ -20,4 +25,27 @@ protected:
 private:
     void RecalculateScrollInfo();
     void ScrollToPos(int nPos);
+};
+
+// ============================================================
+// CPreviewDialog — プレビュータブ
+// ============================================================
+class CPreviewDialog : public CTabDialog
+{
+public:
+    CPreviewDialog(UINT nIDD, CPromptEditorDlg* pMainDlg);
+
+protected:
+    virtual BOOL OnInitDialog() override;
+    afx_msg void OnCbnSelchangePreviewFile();
+    afx_msg void OnSize(UINT nType, int cx, int cy);
+    DECLARE_MESSAGE_MAP()
+
+private:
+    CPromptEditorDlg* m_pMainDlg;
+
+    // リソース定義時の初期座標（ピクセル）— OnSizeでのドリフトを防ぐため記憶
+    CRect m_rcInitCombo;
+    CRect m_rcInitEdit;
+    bool  m_bInitRectsSaved;
 };

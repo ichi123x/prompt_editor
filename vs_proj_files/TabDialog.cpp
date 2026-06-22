@@ -1,6 +1,7 @@
 // TabDialog.cpp
 #include "pch.h"
 #include "TabDialog.h"
+#include "PromptEditorDlg.h"
 
 BEGIN_MESSAGE_MAP(CTabDialog, CDialog)
     ON_WM_VSCROLL()
@@ -8,9 +9,35 @@ BEGIN_MESSAGE_MAP(CTabDialog, CDialog)
     ON_WM_SIZE()
 END_MESSAGE_MAP()
 
+BEGIN_MESSAGE_MAP(CPreviewDialog, CTabDialog)
+    // CBN_SELCHANGE はリストボックスがまだ閉じる前に発火するため不安定。
+    // リストボックス破棄完了後に発火する CBN_CLOSEUP を使用する。
+    ON_CBN_CLOSEUP(IDC_COMBO_PREVIEW_FILE, &CPreviewDialog::OnCbnSelchangePreviewFile)
+    ON_WM_SIZE()
+END_MESSAGE_MAP()
+
 CTabDialog::CTabDialog(UINT nIDD, CWnd* pParent)
     : CDialog(nIDD, pParent)
 {}
+
+CPreviewDialog::CPreviewDialog(UINT nIDD, CPromptEditorDlg* pMainDlg)
+    : CTabDialog(nIDD, nullptr)
+    , m_pMainDlg(pMainDlg)
+    , m_bInitRectsSaved(false)
+{}
+
+void CPreviewDialog::OnCbnSelchangePreviewFile()
+{
+    // CBN_SELCHANGE はコンボのドロップダウンリストボックスがまだ
+    // 閉じる前（破棄処理中）に同期発火する。この最中に RefreshPreview
+    // を直接実行すると、リストボックス破棄処理と DDX/SetWindowText/Invalidate
+    // の連鎖が競合して Windows の Z-order／フォーカス管理が壊れ、
+    // その後に他アプリを起動するとダイアログが前面化しなくなる。
+    // 解決策：PostMessage で次のメッセージループ反復に処理を回し、
+    // リストボックスの破棄完了後に RefreshPreview を実行させる。
+    if (m_pMainDlg)
+        m_pMainDlg->PostMessage(WM_APP_REFRESH_PREVIEW, 0, 0);
+}
 
 CTabDialog::~CTabDialog() {}
 
@@ -18,6 +45,42 @@ BOOL CTabDialog::OnInitDialog()
 {
     CDialog::OnInitDialog();
     RecalculateScrollInfo();
+    return TRUE;
+}
+
+BOOL CPreviewDialog::OnInitDialog()
+{
+    // CTabDialog::OnInitDialog ではなく CDialog::OnInitDialog を直接呼び、
+    // スクロールバー設定（RecalculateScrollInfo）をスキップする。
+    // プレビュータブはエディット自身がスクロールバーを持つため、ダイアログレベルのスクロールは不要。
+    CDialog::OnInitDialog();
+
+    CComboBox* pCombo = (CComboBox*)GetDlgItem(IDC_COMBO_PREVIEW_FILE);
+    if (pCombo)
+    {
+        pCombo->AddString(_T("CLAUDE.md"));
+        pCombo->AddString(_T(".steering/product.md"));
+        pCombo->AddString(_T(".steering/structure.md"));
+        pCombo->AddString(_T(".steering/decisions.md"));
+        pCombo->AddString(_T("tasks/tasklist.md"));
+        pCombo->SetCurSel(0);
+
+        // リソーステンプレートの初期座標を記憶
+        pCombo->GetWindowRect(&m_rcInitCombo);
+        ScreenToClient(&m_rcInitCombo);
+    }
+
+    CWnd* pEdit = GetDlgItem(IDC_EDIT_PREVIEW_CONTENT);
+    if (pEdit)
+    {
+        pEdit->GetWindowRect(&m_rcInitEdit);
+        ScreenToClient(&m_rcInitEdit);
+    }
+
+    // ダイアログレベルのスクロールバーを無効化
+    ShowScrollBar(SB_VERT, FALSE);
+
+    m_bInitRectsSaved = true;
     return TRUE;
 }
 
@@ -139,4 +202,49 @@ void CTabDialog::OnSize(UINT nType, int cx, int cy)
         ScrollToPos(nMax);
 
     RecalculateScrollInfo();
+}
+
+void CPreviewDialog::OnSize(UINT nType, int cx, int cy)
+{
+    // CTabDialog::OnSize（スクロールロジック）をバイパスし、CDialog::OnSizeを直接呼ぶ
+    CDialog::OnSize(nType, cx, cy);
+    if (cx <= 0 || cy <= 0) return;
+    if (!m_bInitRectsSaved) return;
+
+    // スクロールバーが復活しないよう毎回明示的に無効化
+    ShowScrollBar(SB_VERT, FALSE);
+
+    const int MARGIN = 6;
+
+    // コンボボックス：初期X/Yを維持、幅はクライアント幅追従、高さは初期値（ドロップダウン領域込み）固定
+    CWnd* pCombo = GetDlgItem(IDC_COMBO_PREVIEW_FILE);
+    if (pCombo)
+    {
+        int nX = m_rcInitCombo.left;
+        int nY = m_rcInitCombo.top;
+        int nH = m_rcInitCombo.Height();
+        if (nH < 60) nH = 200;  // 念のためドロップダウン用に最低高さ確保
+        int nW = max(50, cx - nX - MARGIN);
+        // クライアント幅が極小でX位置がはみ出す場合のフォールバック
+        if (nX + 50 > cx)
+            nX = max(MARGIN, cx - 50 - MARGIN);
+        pCombo->MoveWindow(nX, nY, nW, nH, TRUE);
+        pCombo->ShowWindow(SW_SHOW);
+    }
+
+    // エディット：初期X/Yを維持し、幅と高さをクライアント領域に追従
+    CWnd* pEdit = GetDlgItem(IDC_EDIT_PREVIEW_CONTENT);
+    if (pEdit)
+    {
+        int nX = m_rcInitEdit.left;
+        int nY = m_rcInitEdit.top;
+        int nW = max(50, cx - nX - MARGIN);
+        int nH = max(50, cy - nY - MARGIN);
+        pEdit->MoveWindow(nX, nY, nW, nH, TRUE);
+        pEdit->ShowWindow(SW_SHOW);
+    }
+
+    // 親側の描画残りをクリーンアップ
+    Invalidate();
+    UpdateWindow();
 }

@@ -18,7 +18,7 @@ CPromptEditorDlg::CPromptEditorDlg(CWnd* pParent)
     , m_nCurrentTab(0)
 {
     // タブ子ダイアログ初期化
-    for (int i = 0; i < 4; i++)
+    for (int i = 0; i < 5; i++)
         m_pTabDlg[i] = nullptr;
 }
 
@@ -63,6 +63,11 @@ BEGIN_MESSAGE_MAP(CPromptEditorDlg, CDialogEx)
     ON_BN_CLICKED(IDC_BUTTON_PREVIEW_REFRESH,  &CPromptEditorDlg::OnBnClickedPreviewRefresh)
     ON_NOTIFY(TCN_SELCHANGE, IDC_TAB_MAIN, &CPromptEditorDlg::OnTcnSelchangeTabMain)
     ON_WM_SIZE()
+    ON_WM_MOUSEACTIVATE()
+    ON_WM_ACTIVATE()
+    ON_WM_ACTIVATEAPP()
+    ON_WM_NCLBUTTONDOWN()
+    ON_MESSAGE(WM_APP_REFRESH_PREVIEW, &CPromptEditorDlg::OnRefreshPreviewMessage)
 END_MESSAGE_MAP()
 
 // ============================================================
@@ -73,6 +78,10 @@ BOOL CPromptEditorDlg::OnInitDialog()
     CDialogEx::OnInitDialog();
 
     SetWindowText(_T("prompt_editor — スペック駆動MDジェネレーター"));
+
+    // WS_EX_APPWINDOW を付与してタスクバー・Alt+Tabに正しく出る通常アプリウィンドウとして扱わせる
+    // （WS_POPUP単独だと所有者が不安定でZ-orderが壊れやすい）
+    ModifyStyleEx(0, WS_EX_APPWINDOW);
 
     // デフォルト値設定
     m_editOwner.SetWindowText(_T("ihira"));
@@ -113,12 +122,6 @@ void CPromptEditorDlg::InitTabControl()
     m_tabMain.GetClientRect(&rcTab);
     m_tabMain.AdjustRect(FALSE, &rcTab);
 
-    // タブコントロールをスクリーン座標→クライアント座標に変換
-    CRect rcTabCtrl;
-    m_tabMain.GetWindowRect(&rcTabCtrl);
-    ScreenToClient(&rcTabCtrl);
-    rcTab.OffsetRect(rcTabCtrl.left, rcTabCtrl.top);
-
     for (int i = 0; i < 5; i++)
     {
         if (i < 4)
@@ -127,7 +130,7 @@ void CPromptEditorDlg::InitTabControl()
         }
         else
         {
-            m_pTabDlg[i] = new CDialog(arrIDD[i], this);
+            m_pTabDlg[i] = new CPreviewDialog(arrIDD[i], this);
         }
 
         m_pTabDlg[i]->Create(arrIDD[i], &m_tabMain);
@@ -199,8 +202,17 @@ void CPromptEditorDlg::CollectData(ProjectData& data)
     m_editOwner.GetWindowText(data.strOwner);
     m_editOutputPath.GetWindowText(data.strOutputPath);
 
-    // プラットフォーム
-    UpdateData(TRUE);   // DDXでm_nPlatformを更新
+    // プラットフォーム — UpdateData(TRUE) を使うと DDX の SendMessage 連鎖が走り
+    // 他処理（特にコンボボックスのリストボックス破棄）と競合してZ-orderが壊れる
+    // ことがあるため、IsDlgButtonChecked で直接読み取る。
+    for (int i = IDC_RADIO_WINFORMS; i <= IDC_RADIO_WEB; i++)
+    {
+        if (IsDlgButtonChecked(i))
+        {
+            m_nPlatform = i - IDC_RADIO_WINFORMS;
+            break;
+        }
+    }
     data.platform = static_cast<PlatformType>(m_nPlatform);
 
     // 各タブの入力値は子ダイアログから取得
@@ -324,7 +336,14 @@ void CPromptEditorDlg::RefreshPreview()
     strContent.Replace(_T("\n"), _T("\r\n"));
 
     CWnd* pEdit = pPreviewDlg->GetDlgItem(IDC_EDIT_PREVIEW_CONTENT);
-    if (pEdit) pEdit->SetWindowText(strContent);
+    if (pEdit)
+    {
+        // SetWindowText だけで内部的に Invalidate と再レイアウトが行われる。
+        // 追加で SetSel/EM_SCROLLCARET/Invalidate/UpdateWindow を呼ぶと SendMessage
+        // 連鎖が増え、コンボボックスの処理と競合して Z-order/フォーカス管理が
+        // 壊れる原因となるため、最小限の処理に留める。
+        pEdit->SetWindowText(strContent);
+    }
 }
 
 // ============================================================
@@ -353,11 +372,16 @@ void CPromptEditorDlg::OnSize(UINT nType, int cx, int cy)
     // タブコントロールを拡張
     if (m_tabMain.GetSafeHwnd())
     {
-        CRect rcTab(MARGIN, HEADER_HEIGHT, cx - MARGIN, cy - FOOTER_HEIGHT);
+        CRect rcTabCtrl;
+        m_tabMain.GetWindowRect(&rcTabCtrl);
+        ScreenToClient(&rcTabCtrl);
+
+        CRect rcTab(MARGIN, rcTabCtrl.top, cx - MARGIN, cy - FOOTER_HEIGHT);
         m_tabMain.MoveWindow(&rcTab, TRUE);  // TRUE を指定して即座にリドロー
 
         // タブのクライアント領域を取得
-        CRect rcTabClient = rcTab;
+        CRect rcTabClient;
+        m_tabMain.GetClientRect(&rcTabClient);
         m_tabMain.AdjustRect(FALSE, &rcTabClient);
 
         // 各タブ子ダイアログをリサイズ
@@ -406,5 +430,97 @@ void CPromptEditorDlg::OnSize(UINT nType, int cx, int cy)
         pClose->MoveWindow(&rcClose, FALSE);
     }
 
-    InvalidateRect(NULL);
+    // 子コントロールも含めて再描画を強制（InvalidateRectでは子に伝播しないため）
+    RedrawWindow(NULL, NULL,
+        RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN | RDW_UPDATENOW);
+}
+
+// ============================================================
+// ForceForeground — Windowsのフォアグラウンド制限を AttachThreadInput トリックで回避し最前面化
+// ============================================================
+static void ForceForeground(HWND hWnd)
+{
+    if (!hWnd || !::IsWindow(hWnd)) return;
+
+    HWND hForeground = ::GetForegroundWindow();
+    DWORD dwForeThread = (hForeground != NULL)
+        ? ::GetWindowThreadProcessId(hForeground, NULL)
+        : 0;
+    DWORD dwMyThread = ::GetCurrentThreadId();
+
+    BOOL bAttached = FALSE;
+    if (dwForeThread != 0 && dwForeThread != dwMyThread)
+        bAttached = ::AttachThreadInput(dwMyThread, dwForeThread, TRUE);
+
+    ::ShowWindow(hWnd, SW_SHOW);
+    ::SetWindowPos(hWnd, HWND_TOP, 0, 0, 0, 0,
+                   SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+    ::BringWindowToTop(hWnd);
+    ::SetForegroundWindow(hWnd);
+    ::SetActiveWindow(hWnd);
+    ::SetFocus(hWnd);
+
+    if (bAttached)
+        ::AttachThreadInput(dwMyThread, dwForeThread, FALSE);
+}
+
+// ============================================================
+// OnMouseActivate — マウスクリック時に確実にダイアログをアクティブ化
+// 他アプリ起動後にダイアログクリックでも前面に来ない不具合への対処
+// ============================================================
+int CPromptEditorDlg::OnMouseActivate(CWnd* pDesktopWnd, UINT nHitTest, UINT message)
+{
+    int result = CDialogEx::OnMouseActivate(pDesktopWnd, nHitTest, message);
+    ForceForeground(GetSafeHwnd());
+
+    // 基底が MA_NOACTIVATE を返してきても明示的に MA_ACTIVATE を返してアクティブ化を強制
+    if (result == MA_NOACTIVATE || result == MA_NOACTIVATEANDEAT)
+        return MA_ACTIVATE;
+    return result;
+}
+
+// ============================================================
+// OnActivate — アクティベート時にZ-orderを明示的に最前面に
+// ============================================================
+void CPromptEditorDlg::OnActivate(UINT nState, CWnd* pWndOther, BOOL bMinimized)
+{
+    CDialogEx::OnActivate(nState, pWndOther, bMinimized);
+
+    if (nState != WA_INACTIVE && !bMinimized)
+        ForceForeground(GetSafeHwnd());
+}
+
+// ============================================================
+// OnActivateApp — アプリケーション単位のアクティベート（より広い検出）
+// ============================================================
+void CPromptEditorDlg::OnActivateApp(BOOL bActive, DWORD dwThreadID)
+{
+    CDialogEx::OnActivateApp(bActive, dwThreadID);
+
+    if (bActive)
+        ForceForeground(GetSafeHwnd());
+}
+
+// ============================================================
+// OnNcLButtonDown — タイトルバー等の非クライアント領域クリック
+// （WM_MOUSEACTIVATE が届かないケースのフォールバック）
+// ============================================================
+void CPromptEditorDlg::OnNcLButtonDown(UINT nHitTest, CPoint point)
+{
+    ForceForeground(GetSafeHwnd());
+    CDialogEx::OnNcLButtonDown(nHitTest, point);
+}
+
+// ============================================================
+// OnRefreshPreviewMessage — PostMessage 経由でプレビューを遅延更新
+// CBN_SELCHANGE がコンボのドロップダウン閉じる前に発火するため、
+// その場で RefreshPreview を呼ぶとリストボックスの破棄処理と競合し、
+// Z-order／フォーカス管理が壊れて他アプリ起動後にダイアログが
+// 前面化しなくなる不具合の原因となる。PostMessage で次のメッセージ
+// ループ反復に持ち越すことで、リストボックス破棄完了後に実行する。
+// ============================================================
+LRESULT CPromptEditorDlg::OnRefreshPreviewMessage(WPARAM, LPARAM)
+{
+    RefreshPreview();
+    return 0;
 }

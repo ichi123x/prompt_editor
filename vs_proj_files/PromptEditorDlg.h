@@ -5,6 +5,10 @@
 #include "resource.h"
 #include "MdGenerator.h"
 
+// プレビュー更新を遅延実行するためのユーザー定義メッセージ
+// （コンボボックスのドロップダウン破棄処理と競合しないようにするため）
+#define WM_APP_REFRESH_PREVIEW (WM_APP + 1)
+
 // ============================================================
 // CPromptEditorDlg — メインダイアログ
 // ============================================================
@@ -78,6 +82,8 @@ private:
     BOOL ValidateInput(const ProjectData& d);  // 入力バリデーション
     void RefreshPreview();                     // プレビュータブ内容を更新
 
+    friend class CPreviewDialog;
+
     // ---- イベントハンドラ ----
     afx_msg void OnBnClickedBrowse();          // フォルダ参照ボタン
     afx_msg void OnBnClickedGenerate();        // 生成ボタン
@@ -85,4 +91,9 @@ private:
     afx_msg void OnBnClickedPreviewRefresh();  // 更新ボタン
     afx_msg void OnTcnSelchangeTabMain(NMHDR* pNMHDR, LRESULT* pResult); // タブ切り替え
     afx_msg void OnSize(UINT nType, int cx, int cy);                     // サイズ変更
+    afx_msg int  OnMouseActivate(CWnd* pDesktopWnd, UINT nHitTest, UINT message); // クリック時アクティベート
+    afx_msg void OnActivate(UINT nState, CWnd* pWndOther, BOOL bMinimized);       // アクティベート
+    afx_msg void OnActivateApp(BOOL bActive, DWORD dwThreadID);                   // アプリアクティベート
+    afx_msg void OnNcLButtonDown(UINT nHitTest, CPoint point);                    // 非クライアント領域左クリック
+    afx_msg LRESULT OnRefreshPreviewMessage(WPARAM wParam, LPARAM lParam);        // プレビュー遅延更新
 };
