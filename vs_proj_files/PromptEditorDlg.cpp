@@ -16,6 +16,7 @@ CPromptEditorDlg::CPromptEditorDlg(CWnd* pParent)
     : CDialogEx(IDD_PROMPT_EDITOR_DIALOG, pParent)
     , m_nPlatform(2)        // デフォルト：MFC
     , m_nCurrentTab(0)
+    , m_bPendingPreviewRefresh(FALSE)
 {
     // タブ子ダイアログ初期化
     for (int i = 0; i < 5; i++)
@@ -63,10 +64,7 @@ BEGIN_MESSAGE_MAP(CPromptEditorDlg, CDialogEx)
     ON_BN_CLICKED(IDC_BUTTON_PREVIEW_REFRESH,  &CPromptEditorDlg::OnBnClickedPreviewRefresh)
     ON_NOTIFY(TCN_SELCHANGE, IDC_TAB_MAIN, &CPromptEditorDlg::OnTcnSelchangeTabMain)
     ON_WM_SIZE()
-    ON_WM_MOUSEACTIVATE()
     ON_WM_ACTIVATE()
-    ON_WM_ACTIVATEAPP()
-    ON_WM_NCLBUTTONDOWN()
     ON_MESSAGE(WM_APP_REFRESH_PREVIEW, &CPromptEditorDlg::OnRefreshPreviewMessage)
 END_MESSAGE_MAP()
 
@@ -430,97 +428,95 @@ void CPromptEditorDlg::OnSize(UINT nType, int cx, int cy)
         pClose->MoveWindow(&rcClose, FALSE);
     }
 
-    // 子コントロールも含めて再描画を強制（InvalidateRectでは子に伝播しないため）
+    // 子コントロールも含めて再描画を要求（RDW_UPDATENOW は使わない：
+    // 同期再描画はメッセージポンプを長時間ブロックし、アクティベート処理と
+    // 競合するため。Windows が次の WM_PAINT で遅延描画する）
     RedrawWindow(NULL, NULL,
-        RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN | RDW_UPDATENOW);
+        RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN);
 }
 
 // ============================================================
-// ForceForeground — Windowsのフォアグラウンド制限を AttachThreadInput トリックで回避し最前面化
-// ============================================================
-static void ForceForeground(HWND hWnd)
-{
-    if (!hWnd || !::IsWindow(hWnd)) return;
-
-    HWND hForeground = ::GetForegroundWindow();
-    DWORD dwForeThread = (hForeground != NULL)
-        ? ::GetWindowThreadProcessId(hForeground, NULL)
-        : 0;
-    DWORD dwMyThread = ::GetCurrentThreadId();
-
-    BOOL bAttached = FALSE;
-    if (dwForeThread != 0 && dwForeThread != dwMyThread)
-        bAttached = ::AttachThreadInput(dwMyThread, dwForeThread, TRUE);
-
-    ::ShowWindow(hWnd, SW_SHOW);
-    ::SetWindowPos(hWnd, HWND_TOP, 0, 0, 0, 0,
-                   SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-    ::BringWindowToTop(hWnd);
-    ::SetForegroundWindow(hWnd);
-    ::SetActiveWindow(hWnd);
-    ::SetFocus(hWnd);
-
-    if (bAttached)
-        ::AttachThreadInput(dwMyThread, dwForeThread, FALSE);
-}
-
-// ============================================================
-// OnMouseActivate — マウスクリック時に確実にダイアログをアクティブ化
-// 他アプリ起動後にダイアログクリックでも前面に来ない不具合への対処
-// ============================================================
-int CPromptEditorDlg::OnMouseActivate(CWnd* pDesktopWnd, UINT nHitTest, UINT message)
-{
-    int result = CDialogEx::OnMouseActivate(pDesktopWnd, nHitTest, message);
-    ForceForeground(GetSafeHwnd());
-
-    // 基底が MA_NOACTIVATE を返してきても明示的に MA_ACTIVATE を返してアクティブ化を強制
-    if (result == MA_NOACTIVATE || result == MA_NOACTIVATEANDEAT)
-        return MA_ACTIVATE;
-    return result;
-}
-
-// ============================================================
-// OnActivate — アクティベート時にZ-orderを明示的に最前面に
+// OnActivate — 非アクティブから復帰した際の Z-order 救済
+//
+// 【意図的に CDialogEx::OnActivate を呼ばない】
+// 基底クラスの OnActivate は内部的に DefWindowProc(WM_ACTIVATE) を呼び出すが、
+// コンボボックスのドロップダウン破棄後に Windows のフォーカス履歴に
+// 破棄済みリストボックスへの参照が残った状態でこれを実行すると、
+// user32 内部の SendMessage がデッドハンドルへの応答待ちで戻ってこなくなり、
+// メッセージポンプが停止する（実機 debugger のスタックトレースで確認済み）。
+//
+// WM_ACTIVATE の既定処理（既定コントロールへのフォーカス設定）はスキップ
+// するが、タイトルバー再描画は別メッセージ WM_NCACTIVATE で実施済みのため
+// 視覚的な実害はない。
 // ============================================================
 void CPromptEditorDlg::OnActivate(UINT nState, CWnd* pWndOther, BOOL bMinimized)
 {
-    CDialogEx::OnActivate(nState, pWndOther, bMinimized);
+    // NOTE: CDialogEx::OnActivate は意図的に呼ばない（上記コメント参照）
+    UNREFERENCED_PARAMETER(pWndOther);
 
-    if (nState != WA_INACTIVE && !bMinimized)
-        ForceForeground(GetSafeHwnd());
-}
+    if (nState == WA_INACTIVE || bMinimized) return;
 
-// ============================================================
-// OnActivateApp — アプリケーション単位のアクティベート（より広い検出）
-// ============================================================
-void CPromptEditorDlg::OnActivateApp(BOOL bActive, DWORD dwThreadID)
-{
-    CDialogEx::OnActivateApp(bActive, dwThreadID);
+    HWND hWnd = GetSafeHwnd();
+    if (!hWnd || !::IsWindow(hWnd)) return;
 
-    if (bActive)
-        ForceForeground(GetSafeHwnd());
-}
+    // 万一画面外に飛んでいた場合はワークエリアに戻す（保険）
+    CRect rcWindow;
+    GetWindowRect(&rcWindow);
+    CRect rcWork;
+    ::SystemParametersInfo(SPI_GETWORKAREA, 0, &rcWork, 0);
+    bool bOffscreen = (rcWindow.right  <= rcWork.left  ||
+                       rcWindow.left   >= rcWork.right ||
+                       rcWindow.bottom <= rcWork.top   ||
+                       rcWindow.top    >= rcWork.bottom);
+    if (bOffscreen)
+    {
+        ::SetWindowPos(hWnd, NULL,
+                       rcWork.left + 50, rcWork.top + 50, 0, 0,
+                       SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOZORDER);
+    }
 
-// ============================================================
-// OnNcLButtonDown — タイトルバー等の非クライアント領域クリック
-// （WM_MOUSEACTIVATE が届かないケースのフォールバック）
-// ============================================================
-void CPromptEditorDlg::OnNcLButtonDown(UINT nHitTest, CPoint point)
-{
-    ForceForeground(GetSafeHwnd());
-    CDialogEx::OnNcLButtonDown(nHitTest, point);
+    // Z-order だけをトップに引き上げる（アクティベートは変えない＝再帰しない）
+    ::SetWindowPos(hWnd, HWND_TOP, 0, 0, 0, 0,
+                   SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+
+    // 非フォアグラウンド中にスキップしたプレビュー更新を再開
+    if (m_bPendingPreviewRefresh)
+    {
+        m_bPendingPreviewRefresh = FALSE;
+        PostMessage(WM_APP_REFRESH_PREVIEW, 0, 0);
+    }
 }
 
 // ============================================================
 // OnRefreshPreviewMessage — PostMessage 経由でプレビューを遅延更新
-// CBN_SELCHANGE がコンボのドロップダウン閉じる前に発火するため、
-// その場で RefreshPreview を呼ぶとリストボックスの破棄処理と競合し、
-// Z-order／フォーカス管理が壊れて他アプリ起動後にダイアログが
-// 前面化しなくなる不具合の原因となる。PostMessage で次のメッセージ
-// ループ反復に持ち越すことで、リストボックス破棄完了後に実行する。
+// CBN_CLOSEUP からこのメッセージを PostMessage で投げる。
+//
+// 非フォアグラウンド時は実行しない：
+//   コンボ選択直後にユーザーが他アプリ（メモ帳等）に切り替えると、
+//   このメッセージ処理（SetWindowText で大きな文字列を扱う重い同期処理）が
+//   アプリ非アクティブ化処理と競合し、Z-order／描画状態が壊れて
+//   ウィンドウが見えなくなる/反応しなくなる原因となる。
+//   非フォアグラウンド時はフラグを立てて延期し、OnActivate 復帰時に再ポストする。
 // ============================================================
 LRESULT CPromptEditorDlg::OnRefreshPreviewMessage(WPARAM, LPARAM)
 {
+    HWND hMe = GetSafeHwnd();
+    HWND hForeground = ::GetForegroundWindow();
+
+    // 自プロセスが前面でない場合は保留し、OnActivate 復帰時に再実行する
+    if (hForeground && hForeground != hMe)
+    {
+        DWORD dwMyPid = 0, dwFgPid = 0;
+        ::GetWindowThreadProcessId(hMe, &dwMyPid);
+        ::GetWindowThreadProcessId(hForeground, &dwFgPid);
+        if (dwMyPid != dwFgPid)
+        {
+            m_bPendingPreviewRefresh = TRUE;
+            return 0;
+        }
+    }
+
+    m_bPendingPreviewRefresh = FALSE;
     RefreshPreview();
     return 0;
 }

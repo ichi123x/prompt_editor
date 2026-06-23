@@ -28,13 +28,23 @@ CPreviewDialog::CPreviewDialog(UINT nIDD, CPromptEditorDlg* pMainDlg)
 
 void CPreviewDialog::OnCbnSelchangePreviewFile()
 {
-    // CBN_SELCHANGE はコンボのドロップダウンリストボックスがまだ
-    // 閉じる前（破棄処理中）に同期発火する。この最中に RefreshPreview
-    // を直接実行すると、リストボックス破棄処理と DDX/SetWindowText/Invalidate
-    // の連鎖が競合して Windows の Z-order／フォーカス管理が壊れ、
-    // その後に他アプリを起動するとダイアログが前面化しなくなる。
-    // 解決策：PostMessage で次のメッセージループ反復に処理を回し、
-    // リストボックスの破棄完了後に RefreshPreview を実行させる。
+    // CBN_CLOSEUP はコンボのドロップダウンリストボックスが破棄された直後に
+    // 発火する。ただし Windows 側のフォーカス／キャプチャ履歴には、破棄済み
+    // リストボックスへの参照が残ることがある。これを放置すると、後の
+    // WM_ACTIVATE 処理で DefWindowProc が破棄済みハンドルに SendMessage を
+    // 試みて user32 内で滞留 → メッセージポンプ停止 → ウィンドウが見えない／
+    // 反応しない、という不具合を引き起こす（debugger で OnActivate→user32 の
+    // ハングとして確認済み）。
+    //
+    // 対策：明示的にキャプチャ解放とコンボへのフォーカス再設定を行い、
+    // フォーカス／キャプチャ履歴を「フレッシュ」な状態にしてから更新を
+    // 遅延ポストする。
+    if (::GetCapture() != NULL)
+        ::ReleaseCapture();
+
+    CWnd* pCombo = GetDlgItem(IDC_COMBO_PREVIEW_FILE);
+    if (pCombo) pCombo->SetFocus();
+
     if (m_pMainDlg)
         m_pMainDlg->PostMessage(WM_APP_REFRESH_PREVIEW, 0, 0);
 }
@@ -244,7 +254,7 @@ void CPreviewDialog::OnSize(UINT nType, int cx, int cy)
         pEdit->ShowWindow(SW_SHOW);
     }
 
-    // 親側の描画残りをクリーンアップ
+    // 親側の描画残りを次の WM_PAINT で消化させる（UpdateWindow による同期描画は
+    // メッセージポンプを長時間ブロックし、アクティベート処理と競合するため使わない）
     Invalidate();
-    UpdateWindow();
 }

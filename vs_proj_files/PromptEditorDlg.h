@@ -75,6 +75,9 @@ private:
     CDialog* m_pTabDlg[5];   // 各タブの子ダイアログポインタ（+プレビュー）
     int      m_nCurrentTab;  // 現在表示中のタブインデックス
 
+    // フォアグラウンド復帰時に再ポストすべきプレビュー更新が保留中かどうか
+    BOOL     m_bPendingPreviewRefresh;
+
     // ---- 内部メソッド ----
     void InitTabControl();                     // タブコントロール初期化
     void ShowTab(int nTab);                    // 指定タブを表示
@@ -91,9 +94,6 @@ private:
     afx_msg void OnBnClickedPreviewRefresh();  // 更新ボタン
     afx_msg void OnTcnSelchangeTabMain(NMHDR* pNMHDR, LRESULT* pResult); // タブ切り替え
     afx_msg void OnSize(UINT nType, int cx, int cy);                     // サイズ変更
-    afx_msg int  OnMouseActivate(CWnd* pDesktopWnd, UINT nHitTest, UINT message); // クリック時アクティベート
-    afx_msg void OnActivate(UINT nState, CWnd* pWndOther, BOOL bMinimized);       // アクティベート
-    afx_msg void OnActivateApp(BOOL bActive, DWORD dwThreadID);                   // アプリアクティベート
-    afx_msg void OnNcLButtonDown(UINT nHitTest, CPoint point);                    // 非クライアント領域左クリック
+    afx_msg void OnActivate(UINT nState, CWnd* pWndOther, BOOL bMinimized); // Z-order救済
     afx_msg LRESULT OnRefreshPreviewMessage(WPARAM wParam, LPARAM lParam);        // プレビュー遅延更新
 };

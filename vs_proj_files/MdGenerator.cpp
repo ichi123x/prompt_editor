@@ -43,58 +43,102 @@ BOOL CMdGenerator::GenerateAll(const ProjectData& data)
 CString CMdGenerator::GenerateCLAUDE(const ProjectData& data)
 {
     CString s;
-    s.Format(
+    CString strPlatform = GetPlatformName(data.platform);
+
+    // --- ヘッダ・プロジェクト概要 ---
+    CString strHead;
+    strHead.Format(
         _T("# CLAUDE.md — プロジェクト指示書\n\n")
         _T("## プロジェクト概要\n\n")
         _T("- **プロジェクト名**：%s\n")
         _T("- **目的**：%s\n")
         _T("- **担当者**：%s\n")
-        _T("- **プラットフォーム**：%s\n\n")
-        _T("---\n\n")
-        _T("## Claudeへの基本指示\n\n")
-        _T("- 応答・コメントは**日本語**で統一すること\n")
-        _T("- コードのコメントも日本語で記述すること\n")
-        _T("- 不明点があれば作業前に必ず確認すること\n")
-        _T("- 破壊的変更（ファイル削除・上書き）は事前に報告し、承認を得てから実行すること\n")
-        _T("- タスク完了時は `tasks/tasklist.md` の該当項目をチェック済みに更新すること\n")
-        _T("%s\n\n")
-        _T("---\n\n")
-        _T("## ディレクトリ構成\n\n")
-        _T("```\n")
-        _T(".\n")
-        _T("├── CLAUDE.md              # この指示ファイル\n")
-        _T("├── .steering/             # スペック駆動開発の仕様書群\n")
-        _T("│   ├── product.md         # プロダクト要件・ゴール定義\n")
-        _T("│   ├── structure.md       # アーキテクチャ・技術スタック\n")
-        _T("│   └── decisions.md       # 設計判断の記録（ADR）\n")
-        _T("├── tasks/\n")
-        _T("│   └── tasklist.md        # タスク一覧・進捗管理\n")
-        _T("├── docs/                  # 設計書・仕様書・メモ\n")
-        _T("└── src/                   # ソースコード\n")
-        _T("```\n\n")
-        _T("---\n\n")
-        _T("## 開発フロー（スペック駆動）\n\n")
-        _T("```\n")
-        _T("1. 要件定義  → .steering/product.md を更新\n")
-        _T("2. 設計      → .steering/structure.md を更新\n")
-        _T("3. タスク分解 → tasks/tasklist.md にタスクを追加\n")
-        _T("4. 実装      → タスクを上から順に実施\n")
-        _T("5. 確認      → タスクをチェック済みに更新\n")
-        _T("6. 設計判断  → .steering/decisions.md に記録\n")
-        _T("```\n\n")
-        _T("---\n\n")
-        _T("## 禁止事項\n\n")
-        _T("- `.steering/` 内のファイルを無断で書き換えないこと\n")
-        _T("- `tasks/tasklist.md` のタスクを無断で削除しないこと\n")
-        _T("- 未確認の外部ライブラリを追加しないこと\n")
-        _T("%s\n"),
+        _T("- **実装言語**：%s\n\n")
+        _T("---\n\n"),
         (LPCTSTR)data.strProjectName,
         (LPCTSTR)data.strPurpose,
         (LPCTSTR)data.strOwner,
-        (LPCTSTR)GetPlatformName(data.platform),
-        data.strClaudeBasic.IsEmpty() ? _T("") : (LPCTSTR)(CString(_T("- ")) + data.strClaudeBasic),
-        data.strClaudeProhibited.IsEmpty() ? _T("") : (LPCTSTR)(CString(_T("- ")) + data.strClaudeProhibited)
+        (LPCTSTR)strPlatform
     );
+    s += strHead;
+
+    // --- Claudeへの基本指示 ---
+    s += _T("## Claudeへの基本指示\n\n");
+    s += _T("- 応答・コメントは**日本語**で統一すること\n");
+    s += _T("- コードのコメントも日本語で記述すること\n");
+    s += _T("- 不明点があれば作業前に必ず確認すること\n");
+    s += _T("- 破壊的変更（ファイル削除・上書き）は事前に報告し、承認を得てから実行すること\n");
+    s += _T("- タスク完了時は `tasks/tasklist.md` の該当項目をチェック済みに更新すること\n");
+    if (!data.strClaudeBasic.IsEmpty())
+        s += _T("- ") + data.strClaudeBasic + _T("\n");
+    s += _T("\n");
+
+    // --- 実装言語別 行動規約（重要） ---
+    CString strGuidelines = GetPlatformGuidelines(data.platform);
+    if (!strGuidelines.IsEmpty())
+    {
+        s += _T("### ") + strPlatform + _T("作業時の行動規約（重要）\n\n");
+        s += strGuidelines;
+        s += _T("\n");
+    }
+
+    s += _T("---\n\n");
+
+    // --- ビルド環境・前提 ---
+    CString strBuildEnv = GetBuildEnvironment(data.platform);
+    if (!strBuildEnv.IsEmpty())
+    {
+        s += _T("## ビルド環境・前提（変更不可）\n\n");
+        s += strBuildEnv;
+        s += _T("\n---\n\n");
+    }
+
+    // --- 実装言語別 コーディング規約 ---
+    CString strCodingRules = GetCodingRules(data.platform);
+    if (!strCodingRules.IsEmpty())
+    {
+        s += _T("## ") + strPlatform + _T("コーディング規約\n\n");
+        s += strCodingRules;
+        s += _T("\n> 注：実ファイル（リソース定義・各クラス）の内容はこのファイルに転記しない（古くなると害になるため）。\n");
+        s += _T("> 作業のたびに実ファイルを参照すること。\n\n");
+        s += _T("---\n\n");
+    }
+
+    // --- ディレクトリ構成 ---
+    s += _T("## ディレクトリ構成\n\n");
+    s += _T("```\n");
+    s += _T(".\n");
+    s += _T("├── CLAUDE.md              # この指示ファイル\n");
+    s += _T("├── .steering/             # スペック駆動開発の仕様書群\n");
+    s += _T("│   ├── product.md         # プロダクト要件・ゴール定義\n");
+    s += _T("│   ├── structure.md       # アーキテクチャ・技術スタック\n");
+    s += _T("│   └── decisions.md       # 設計判断の記録（ADR）\n");
+    s += _T("├── tasks/\n");
+    s += _T("│   └── tasklist.md        # タスク一覧・進捗管理\n");
+    s += _T("├── docs/                  # 設計書・仕様書・メモ\n");
+    s += _T("└── src/                   # ソースコード\n");
+    s += _T("```\n\n");
+    s += _T("---\n\n");
+
+    // --- 開発フロー ---
+    s += _T("## 開発フロー（スペック駆動）\n\n");
+    s += _T("```\n");
+    s += _T("1. 要件定義  → .steering/product.md を更新\n");
+    s += _T("2. 設計      → .steering/structure.md を更新\n");
+    s += _T("3. タスク分解 → tasks/tasklist.md にタスクを追加\n");
+    s += _T("4. 実装      → タスクを上から順に実施（作業時の行動規約を厳守）\n");
+    s += _T("5. 確認      → タスクをチェック済みに更新\n");
+    s += _T("6. 設計判断  → .steering/decisions.md に記録\n");
+    s += _T("```\n");
+
+    // --- 禁止事項（ユーザー入力がある場合のみ） ---
+    if (!data.strClaudeProhibited.IsEmpty())
+    {
+        s += _T("\n---\n\n");
+        s += _T("## 禁止事項\n\n");
+        s += _T("- ") + data.strClaudeProhibited + _T("\n");
+    }
+
     return s;
 }
 
@@ -372,6 +416,172 @@ CString CMdGenerator::GetTechStackTemplate(PlatformType pt)
             _T("| 言語 | （未記入） | |\n")
             _T("| フレームワーク | （未記入） | |\n")
             _T("| バージョン管理 | Git / GitHub | |");
+    }
+}
+
+// ============================================================
+// プラットフォーム別 作業時の行動規約を返す（CLAUDE.md用）
+// ============================================================
+CString CMdGenerator::GetPlatformGuidelines(PlatformType pt)
+{
+    switch (pt)
+    {
+    case PlatformType::MFC:
+        return
+            _T("- **コードを提案・編集する前に、必ず該当の `.rc` と `resource.h` を読むこと**。コントロールIDを推測で書かない\n")
+            _T("- ダイアログクラスを編集するときは、対応するヘッダ（メンバ変数とDDX定義）も併せて確認すること\n")
+            _T("- 新規のリソースID（`IDC_` / `IDD_` / `IDR_`）を勝手に発番せず、既存IDを使うこと。新規発番が必要な場合は理由とともに確認を求めること\n")
+            _T("- メッセージマップ（`BEGIN_MESSAGE_MAP`〜`END_MESSAGE_MAP`）は既存ブロックを確認してから追記し、マクロの省略・重複をしないこと\n")
+            _T("- ビルド構成・プロジェクト設定（プラットフォーム、文字セット、MFCリンク方式）を変更しないこと\n")
+            _T("- ビルドはClaudeが実行せず、VS2022側で行う前提とする（エラーが出たらテキストを貼って共有する運用）\n");
+
+    case PlatformType::Win32:
+        return
+            _T("- ウィンドウプロシージャ（`WndProc`）を編集するときは、既存のメッセージ分岐を確認し、`default:` の `DefWindowProc` 呼び出しを必ず維持すること\n")
+            _T("- リソースID（`IDR_` / `IDM_` / `IDC_`）を勝手に発番せず、既存IDを使うこと\n")
+            _T("- ハンドル（`HWND` / `HDC` / `HBRUSH` 等）の生成と破棄を対で行い、`GetDC`/`ReleaseDC`、`SelectObject` 後の旧オブジェクト復元などを徹底すること\n")
+            _T("- Win32 API呼び出しの戻り値・`GetLastError()` を必要に応じて確認すること\n")
+            _T("- ビルド構成・プロジェクト設定（文字セット、ターゲットアーキテクチャ）を変更しないこと\n")
+            _T("- ビルドはClaudeが実行せず、VS2022側で行う前提とする\n");
+
+    case PlatformType::WinForms:
+        return
+            _T("- Designer自動生成コード（`*.Designer.cs`）を手書きで編集しないこと。UI変更はデザイナ側で行う前提\n")
+            _T("- イベントハンドラの追加・削除はDesigner経由で行うか、命名規則（`コントロール名_イベント名`）を維持すること\n")
+            _T("- `.csproj` のターゲットフレームワーク・出力設定を勝手に変更しないこと\n")
+            _T("- ビルドはClaudeが実行せず、VS2022側で行う前提とする\n");
+
+    case PlatformType::WPF:
+        return
+            _T("- XAMLとコードビハインドの責務分離を維持すること。ロジックは可能な限りViewModelに寄せ、View側に書かない\n")
+            _T("- MVVMパターンに従い、UIスレッド外からのUIアクセスは `Dispatcher.Invoke` 経由とすること\n")
+            _T("- リソースディクショナリ・スタイルを編集するときは、対象スコープ（App/Window/Control）を確認すること\n")
+            _T("- `.csproj` のターゲットフレームワーク・出力設定を勝手に変更しないこと\n")
+            _T("- ビルドはClaudeが実行せず、VS2022側で行う前提とする\n");
+
+    case PlatformType::Web:
+        return
+            _T("- パッケージ追加・更新は事前に確認を求めること（`package.json` の自動編集は不可）\n")
+            _T("- ビルドツール（webpack / vite 等）の設定を勝手に変更しないこと\n")
+            _T("- 外部CDN・サードパーティスクリプトの追加は、用途と取得元を明示してから行うこと\n")
+            _T("- XSS / CSRF などの基本的なセキュリティに配慮したコードを書くこと\n");
+
+    default:
+        return _T("");
+    }
+}
+
+// ============================================================
+// プラットフォーム別 ビルド環境テーブルを返す（CLAUDE.md用）
+// ============================================================
+CString CMdGenerator::GetBuildEnvironment(PlatformType pt)
+{
+    switch (pt)
+    {
+    case PlatformType::MFC:
+        return
+            _T("| 項目 | 設定 |\n")
+            _T("|------|------|\n")
+            _T("| IDE / ビルド | VS2022 + MSBuild |\n")
+            _T("| MFCリンク方式 | 共有DLL（static MFCではない） |\n")
+            _T("| 文字セット | Unicode（`_UNICODE` / `UNICODE` 定義済み）。`CString` は実質 `CStringW` |\n")
+            _T("| ターゲットアーキテクチャ | x64 |\n")
+            _T("| C++標準 | C++17 |\n");
+
+    case PlatformType::Win32:
+        return
+            _T("| 項目 | 設定 |\n")
+            _T("|------|------|\n")
+            _T("| IDE / ビルド | VS2022 + MSBuild |\n")
+            _T("| 文字セット | Unicode（`_UNICODE` / `UNICODE` 定義済み）。文字列は `TCHAR` / `WCHAR` |\n")
+            _T("| ターゲットアーキテクチャ | x64 |\n")
+            _T("| C++標準 | C++17 |\n");
+
+    case PlatformType::WinForms:
+        return
+            _T("| 項目 | 設定 |\n")
+            _T("|------|------|\n")
+            _T("| IDE / ビルド | VS2022 + MSBuild / `dotnet build` |\n")
+            _T("| フレームワーク | .NET 8 以降 |\n")
+            _T("| 言語バージョン | C# 12 |\n")
+            _T("| ターゲットアーキテクチャ | x64 |\n");
+
+    case PlatformType::WPF:
+        return
+            _T("| 項目 | 設定 |\n")
+            _T("|------|------|\n")
+            _T("| IDE / ビルド | VS2022 + MSBuild / `dotnet build` |\n")
+            _T("| フレームワーク | .NET 8 以降 |\n")
+            _T("| 言語バージョン | C# 12 |\n")
+            _T("| アーキテクチャ方針 | MVVM |\n")
+            _T("| ターゲットアーキテクチャ | x64 |\n");
+
+    case PlatformType::Web:
+        return
+            _T("| 項目 | 設定 |\n")
+            _T("|------|------|\n")
+            _T("| ランタイム | Node.js（LTS） |\n")
+            _T("| パッケージ管理 | npm / yarn（プロジェクト方針に従う） |\n")
+            _T("| ビルドツール | （プロジェクトで決定） |\n")
+            _T("| 実行環境 | モダンブラウザ |\n");
+
+    default:
+        return _T("");
+    }
+}
+
+// ============================================================
+// プラットフォーム別 コーディング規約を返す（CLAUDE.md用）
+// ============================================================
+CString CMdGenerator::GetCodingRules(PlatformType pt)
+{
+    switch (pt)
+    {
+    case PlatformType::MFC:
+        return
+            _T("- 文字列リテラルは `_T(\"...\")` または `L\"...\"` で統一する。生の `\"...\"` は使わない\n")
+            _T("- DDX/DDVの向きに注意する\n")
+            _T("  - `UpdateData(TRUE)`：画面 → 変数（取得）\n")
+            _T("  - `UpdateData(FALSE)`：変数 → 画面（設定）\n")
+            _T("- リソースID命名規則を守る：`IDD_`（ダイアログ）／`IDC_`（コントロール）／`IDR_`（リソース）\n")
+            _T("- `new` した `CWnd` 派生オブジェクトの破棄責任・親子ウィンドウの所有権を明示的に管理する\n")
+            _T("- エラー処理の方針はプロジェクト内で統一する（MFC例外 `CException` 派生 / 標準例外のどちらかに寄せる）\n")
+            _T("- ファイル出力はUTF-8（BOMの有無はプロジェクト方針に合わせる）\n");
+
+    case PlatformType::Win32:
+        return
+            _T("- 文字列リテラルは `_T(\"...\")` または `L\"...\"` で統一する。生の `\"...\"` は使わない\n")
+            _T("- ハンドル変数は使用後に必ず `Close*` / `Destroy*` / `Release*` で解放する\n")
+            _T("- `GetDC` / `BeginPaint` は対応する `ReleaseDC` / `EndPaint` と必ずペアにする\n")
+            _T("- メッセージ処理関数の戻り値（`LRESULT`）を正しく返す\n")
+            _T("- API戻り値・`GetLastError()` を確認し、失敗時の挙動を明示する\n");
+
+    case PlatformType::WinForms:
+        return
+            _T("- 命名規則は .NET 標準（型・メソッド・プロパティは PascalCase、フィールドは `_camelCase`）\n")
+            _T("- I/O・長時間処理は `async` / `await` を使い、UIスレッドをブロックしない\n")
+            _T("- nullable 参照型を有効化し、null 安全を意識する\n")
+            _T("- リソース（`Form` / `Stream` / `IDisposable`）は `using` で確実に破棄する\n")
+            _T("- ファイル出力はUTF-8（BOMの有無はプロジェクト方針に合わせる）\n");
+
+    case PlatformType::WPF:
+        return
+            _T("- 命名規則は .NET 標準（型・メソッド・プロパティは PascalCase、フィールドは `_camelCase`）\n")
+            _T("- ViewModelは `INotifyPropertyChanged` を実装し、ロジックはここに集約する\n")
+            _T("- `ICommand`（`RelayCommand` 等）でユーザー操作をバインドする\n")
+            _T("- I/O・長時間処理は `async` / `await`、UI更新は `Dispatcher` 経由で行う\n")
+            _T("- リソース（`Stream` / `IDisposable`）は `using` で確実に破棄する\n");
+
+    case PlatformType::Web:
+        return
+            _T("- ES2020以降の構文を使用する。`var` は使わず `const` / `let` を使う\n")
+            _T("- 命名規則：変数・関数は camelCase、コンポーネント・クラスは PascalCase、定数は UPPER_SNAKE_CASE\n")
+            _T("- 非同期処理は `async` / `await` を使用する\n")
+            _T("- 入力値のサニタイズ・XSS対策を行う\n")
+            _T("- ソースの文字コードはUTF-8\n");
+
+    default:
+        return _T("");
     }
 }
 

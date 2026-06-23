@@ -75,6 +75,15 @@ private:
     // プラットフォーム別の技術スタックテンプレートを返す
     CString GetTechStackTemplate(PlatformType pt);
 
+    // プラットフォーム別の作業時行動規約を返す（CLAUDE.md用）
+    CString GetPlatformGuidelines(PlatformType pt);
+
+    // プラットフォーム別のビルド環境テーブルを返す（CLAUDE.md用）
+    CString GetBuildEnvironment(PlatformType pt);
+
+    // プラットフォーム別のコーディング規約を返す（CLAUDE.md用）
+    CString GetCodingRules(PlatformType pt);
+
     // UTF-8（BOMなし）でファイルに書き出す
     BOOL WriteFileUtf8(const CString& strPath, const CString& strContent);
 
