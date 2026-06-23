@@ -1,6 +1,57 @@
+# ===== Node.js / Web (既存) =====
 node_modules/
 .env
 .env.local
 .env.*.local
 *.log
 .DS_Store
+
+# ===== Visual Studio / MFC (C++) =====
+# VS のローカル設定・キャッシュ
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# ビルド出力ディレクトリ
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Ww]in32/
+[Bb]uild/
+[Bb]in/
+[Oo]bj/
+
+# C/C++ ビルド中間・成果物
+*.obj
+*.o
+*.pch
+*.ipch
+*.ilk
+*.pdb
+*.idb
+*.exe
+*.dll
+*.lib
+*.exp
+*.res
+*.tlog
+*.lastbuildstate
+*.recipe
+*.exe.recipe
+
+# VS のデータベース・参照ファイル
+*.VC.db
+*.VC.opendb
+Browse.VC.db
+*.ncb
+*.aps
+*.sdf
+*.opensdf
+ipch/
+
+# レイアウト・バックアップ
+DocumentLayout.json
+DocumentLayout.backup.json
