@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>prompt_editor — スペック駆動MDジェネレーター</title>
+<style>
+  body { font-family: "Segoe UI", "Meiryo", "Hiragino Sans", sans-serif; margin: 16px; max-width: 980px; color: #222; }
+  h1 { font-size: 16px; margin: 0 0 12px; }
+  fieldset { margin: 8px 0; padding: 10px 14px; border: 1px solid #ccc; }
+  legend { font-weight: bold; padding: 0 6px; }
+  .row { margin: 6px 0; display: flex; align-items: center; gap: 8px; }
+  .row > label { min-width: 130px; }
+  input[type="text"] { padding: 3px 6px; }
+  textarea { width: 100%; box-sizing: border-box; font-family: "Consolas", "MS Gothic", monospace; font-size: 12px; padding: 4px 6px; }
+  .platform-row label { min-width: 0; margin-right: 10px; }
+  .tabs { margin-top: 14px; border-bottom: 1px solid #ccc; }
+  .tabs button { background: none; border: none; padding: 8px 16px; cursor: pointer; font-size: 13px; color: #555; }
+  .tabs button.active { border-bottom: 2px solid #0078d4; color: #000; font-weight: bold; }
+  .tab-pane { display: none; padding: 12px 4px; border: 1px solid #ccc; border-top: none; }
+  .tab-pane.active { display: block; }
+  .tab-row { margin: 8px 0; }
+  .tab-row label { display: block; font-weight: bold; margin-bottom: 3px; font-size: 12px; }
+  .hint { color: #777; font-size: 11px; margin-top: 4px; }
+  .actions { margin: 14px 0; display: flex; gap: 8px; align-items: center; }
+  button.primary { background: #0078d4; color: white; border: none; padding: 8px 22px; font-size: 14px; cursor: pointer; border-radius: 2px; }
+  button.primary:hover { background: #106ebe; }
+  .output { margin-top: 8px; }
+  .output-header { display: flex; gap: 8px; align-items: center; margin-bottom: 6px; }
+  .output-header label { font-weight: bold; }
+  #outputText { width: 100%; height: 500px; box-sizing: border-box; font-family: "Consolas", "MS Gothic", monospace; font-size: 12px; white-space: pre; }
+</style>
+</head>
+<body>
+<h1>prompt_editor — スペック駆動MDジェネレーター（Web版）</h1>
+
+<fieldset>
+  <legend>共通入力</legend>
+  <div class="row"><label>プロジェクト名：</label><input type="text" id="projectName" style="width:300px;"></div>
+  <div class="row"><label>目的：</label><input type="text" id="purpose" style="width:640px;"></div>
+  <div class="row"><label>担当者：</label><input type="text" id="owner" value="ihira" style="width:200px;"></div>
+  <div class="row platform-row"><label>プラットフォーム：</label>
+    <label><input type="radio" name="platform" value="0"> C#/WinForms</label>
+    <label><input type="radio" name="platform" value="1"> C#/WPF</label>
+    <label><input type="radio" name="platform" value="2" checked> C++/MFC</label>
+    <label><input type="radio" name="platform" value="3"> C++/Win32</label>
+    <label><input type="radio" name="platform" value="4"> Web(HTML/CSS/JS)</label>
+  </div>
+</fieldset>
+
+<div class="tabs">
+  <button class="tab-btn active" data-tab="req">要件定義</button>
+  <button class="tab-btn" data-tab="design">設計</button>
+  <button class="tab-btn" data-tab="tasks">タスク管理</button>
+  <button class="tab-btn" data-tab="claude">CLAUDE.md</button>
+</div>
+
+<div class="tab-pane active" id="tab-req">
+  <div class="tab-row"><label>ゴール：</label><textarea id="goal" rows="3"></textarea></div>
+  <div class="tab-row"><label>ターゲットユーザー：</label><textarea id="targetUser" rows="2"></textarea></div>
+  <div class="tab-row"><label>解決したい課題：</label><textarea id="problem" rows="3"></textarea></div>
+  <div class="tab-row"><label>成功の定義：</label><textarea id="successCriteria" rows="3"></textarea></div>
+  <div class="tab-row"><label>In Scope：</label><textarea id="inScope" rows="2"></textarea></div>
+  <div class="tab-row"><label>Out of Scope：</label><textarea id="outScope" rows="2"></textarea></div>
+</div>
+
+<div class="tab-pane" id="tab-design">
+  <div class="tab-row"><label>技術スタック補足：</label><textarea id="techStackNote" rows="2"></textarea></div>
+  <div class="tab-row"><label>命名規則：</label><textarea id="namingRules" rows="4"></textarea></div>
+  <div class="tab-row"><label>コーディング規約：</label><textarea id="codingRules" rows="4"></textarea></div>
+  <div class="tab-row"><label>データフロー：</label><textarea id="dataFlow" rows="4"></textarea></div>
+  <div class="tab-row"><label>外部依存：</label><textarea id="externalDeps" rows="2"></textarea></div>
+</div>
+
+<div class="tab-pane" id="tab-tasks">
+  <div class="tab-row"><label>フェーズ1 追加タスク：</label><textarea id="tasksPhase1" rows="5"></textarea></div>
+  <div class="tab-row"><label>フェーズ2 追加タスク：</label><textarea id="tasksPhase2" rows="5"></textarea></div>
+  <div class="tab-row"><label>フェーズ3 実装タスク：</label><textarea id="tasksPhase3" rows="6"></textarea></div>
+  <div class="hint">※ 各タスクは「- [ ] タスク内容」形式で入力</div>
+</div>
+
+<div class="tab-pane" id="tab-claude">
+  <div class="tab-row"><label>追加する基本指示：</label><textarea id="claudeBasic" rows="6"></textarea></div>
+  <div class="tab-row"><label>追加する禁止事項：</label><textarea id="claudeProhibited" rows="6"></textarea></div>
+  <div class="hint">※ 標準の指示・禁止事項はテンプレートから自動挿入されます</div>
+</div>
+
+<div class="actions">
+  <button class="primary" id="generateBtn">生成</button>
+</div>
+
+<div class="output">
+  <div class="output-header">
+    <label>表示ファイル：</label>
+    <select id="fileSelect">
+      <option value="0">CLAUDE.md</option>
+      <option value="1">.steering/product.md</option>
+      <option value="2">.steering/structure.md</option>
+      <option value="3">.steering/decisions.md</option>
+      <option value="4">tasks/tasklist.md</option>
+    </select>
+  </div>
+  <textarea id="outputText" readonly placeholder="「生成」ボタンを押すと、ここにMarkdownが表示されます。"></textarea>
+</div>
+
+<script>
+(function() {
+  'use strict';
+
+  // ============================================================
+  // タブ切り替え
+  // ============================================================
+  document.querySelectorAll('.tab-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      document.querySelectorAll('.tab-btn').forEach(function(b) { b.classList.remove('active'); });
+      document.querySelectorAll('.tab-pane').forEach(function(p) { p.classList.remove('active'); });
+      btn.classList.add('active');
+      document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+    });
+  });
+
+  function $(id) { return document.getElementById(id); }
+
+  function getSelectedPlatform() {
+    var r = document.querySelector('input[name="platform"]:checked');
+    return r ? parseInt(r.value, 10) : 2;
+  }
+
+  // CollectData() 相当
+  function collectData() {
+    return {
+      strProjectName:     $('projectName').value,
+      strPurpose:         $('purpose').value,
+      strOwner:           $('owner').value,
+      platform:           getSelectedPlatform(),
+
+      strGoal:            $('goal').value,
+      strTargetUser:      $('targetUser').value,
+      strProblem:         $('problem').value,
+      strSuccessCriteria: $('successCriteria').value,
+      strInScope:         $('inScope').value,
+      strOutScope:        $('outScope').value,
+
+      strTechStackNote:   $('techStackNote').value,
+      strNamingRules:     $('namingRules').value,
+      strCodingRules:     $('codingRules').value,
+      strDataFlow:        $('dataFlow').value,
+      strExternalDeps:    $('externalDeps').value,
+
+      strTasksPhase1:     $('tasksPhase1').value,
+      strTasksPhase2:     $('tasksPhase2').value,
+      strTasksPhase3:     $('tasksPhase3').value,
+
+      strClaudeBasic:     $('claudeBasic').value,
+      strClaudeProhibited: $('claudeProhibited').value
+    };
+  }
+
+  // CString::IsEmpty() 相当
+  function isEmpty(s) { return s === ''; }
+
+  // ============================================================
+  // GetPlatformName
+  // ============================================================
+  function getPlatformName(pt) {
+    switch (pt) {
+      case 0: return 'C# / WinForms';
+      case 1: return 'C# / WPF';
+      case 2: return 'C++ / MFC';
+      case 3: return 'C++ / Win32 API';
+      case 4: return 'Web (HTML/CSS/JS)';
+      default: return '（未選択）';
+    }
+  }
+
+  // ============================================================
+  // GetTechStackTemplate
+  // ============================================================
+  function getTechStackTemplate(pt) {
+    switch (pt) {
+      case 0:
+        return '| 項目 | 採用技術 | 理由 |\n' +
+               '|------|----------|------|\n' +
+               '| 言語 | C# | .NET標準 |\n' +
+               '| フレームワーク | WinForms (.NET 8以降) | シンプルなデスクトップUI |\n' +
+               '| 主要ライブラリ | （未記入） | |\n' +
+               '| 実行環境 | Windows 10/11 | |\n' +
+               '| バージョン管理 | Git / GitHub | |';
+      case 1:
+        return '| 項目 | 採用技術 | 理由 |\n' +
+               '|------|----------|------|\n' +
+               '| 言語 | C# | .NET標準 |\n' +
+               '| フレームワーク | WPF (.NET 8以降) | XAML/MVVMによるモダンUI |\n' +
+               '| アーキテクチャ | MVVM | データバインディング活用 |\n' +
+               '| 主要ライブラリ | （未記入） | |\n' +
+               '| 実行環境 | Windows 10/11 | |\n' +
+               '| バージョン管理 | Git / GitHub | |';
+      case 2:
+        return '| 項目 | 採用技術 | 理由 |\n' +
+               '|------|----------|------|\n' +
+               '| 言語 | C++ | 組み込み系との親和性 |\n' +
+               '| フレームワーク | MFC (VS2022) | ダイアログベースUI |\n' +
+               '| 文字コード | Unicode (_UNICODE) | 日本語対応 |\n' +
+               '| ビルド | x64 Release | |\n' +
+               '| 実行環境 | Windows 10/11 | |\n' +
+               '| バージョン管理 | Git / GitHub | |';
+      case 3:
+        return '| 項目 | 採用技術 | 理由 |\n' +
+               '|------|----------|------|\n' +
+               '| 言語 | C++ | 軽量・低依存 |\n' +
+               '| フレームワーク | Win32 API | 依存なし・最小構成 |\n' +
+               '| 文字コード | Unicode (TCHAR/WCHAR) | 日本語対応 |\n' +
+               '| ビルド | x64 Release | |\n' +
+               '| 実行環境 | Windows 10/11 | |\n' +
+               '| バージョン管理 | Git / GitHub | |';
+      case 4:
+        return '| 項目 | 採用技術 | 理由 |\n' +
+               '|------|----------|------|\n' +
+               '| 言語 | HTML / CSS / JavaScript | Web標準 |\n' +
+               '| フレームワーク | （未記入） | |\n' +
+               '| パッケージ管理 | npm / yarn | |\n' +
+               '| ビルドツール | （未記入） | |\n' +
+               '| 実行環境 | ブラウザ / Node.js | |\n' +
+               '| バージョン管理 | Git / GitHub | |';
+      default:
+        return '| 項目 | 採用技術 | 理由 |\n' +
+               '|------|----------|------|\n' +
+               '| 言語 | （未記入） | |\n' +
+               '| フレームワーク | （未記入） | |\n' +
+               '| バージョン管理 | Git / GitHub | |';
+    }
+  }
+
+  // ============================================================
+  // GetPlatformGuidelines
+  // ============================================================
+  function getPlatformGuidelines(pt) {
+    switch (pt) {
+      case 2:
+        return '- **コードを提案・編集する前に、必ず該当の `.rc` と `resource.h` を読むこと**。コントロールIDを推測で書かない\n' +
+               '- ダイアログクラスを編集するときは、対応するヘッダ（メンバ変数とDDX定義）も併せて確認すること\n' +
+               '- 新規のリソースID（`IDC_` / `IDD_` / `IDR_`）を勝手に発番せず、既存IDを使うこと。新規発番が必要な場合は理由とともに確認を求めること\n' +
+               '- メッセージマップ（`BEGIN_MESSAGE_MAP`〜`END_MESSAGE_MAP`）は既存ブロックを確認してから追記し、マクロの省略・重複をしないこと\n' +
+               '- ビルド構成・プロジェクト設定（プラットフォーム、文字セット、MFCリンク方式）を変更しないこと\n' +
+               '- ビルドはClaudeが実行せず、VS2022側で行う前提とする（エラーが出たらテキストを貼って共有する運用）\n';
+      case 3:
+        return '- ウィンドウプロシージャ（`WndProc`）を編集するときは、既存のメッセージ分岐を確認し、`default:` の `DefWindowProc` 呼び出しを必ず維持すること\n' +
+               '- リソースID（`IDR_` / `IDM_` / `IDC_`）を勝手に発番せず、既存IDを使うこと\n' +
+               '- ハンドル（`HWND` / `HDC` / `HBRUSH` 等）の生成と破棄を対で行い、`GetDC`/`ReleaseDC`、`SelectObject` 後の旧オブジェクト復元などを徹底すること\n' +
+               '- Win32 API呼び出しの戻り値・`GetLastError()` を必要に応じて確認すること\n' +
+               '- ビルド構成・プロジェクト設定（文字セット、ターゲットアーキテクチャ）を変更しないこと\n' +
+               '- ビルドはClaudeが実行せず、VS2022側で行う前提とする\n';
+      case 0:
+        return '- Designer自動生成コード（`*.Designer.cs`）を手書きで編集しないこと。UI変更はデザイナ側で行う前提\n' +
+               '- イベントハンドラの追加・削除はDesigner経由で行うか、命名規則（`コントロール名_イベント名`）を維持すること\n' +
+               '- `.csproj` のターゲットフレームワーク・出力設定を勝手に変更しないこと\n' +
+               '- ビルドはClaudeが実行せず、VS2022側で行う前提とする\n';
+      case 1:
+        return '- XAMLとコードビハインドの責務分離を維持すること。ロジックは可能な限りViewModelに寄せ、View側に書かない\n' +
+               '- MVVMパターンに従い、UIスレッド外からのUIアクセスは `Dispatcher.Invoke` 経由とすること\n' +
+               '- リソースディクショナリ・スタイルを編集するときは、対象スコープ（App/Window/Control）を確認すること\n' +
+               '- `.csproj` のターゲットフレームワーク・出力設定を勝手に変更しないこと\n' +
+               '- ビルドはClaudeが実行せず、VS2022側で行う前提とする\n';
+      case 4:
+        return '- パッケージ追加・更新は事前に確認を求めること（`package.json` の自動編集は不可）\n' +
+               '- ビルドツール（webpack / vite 等）の設定を勝手に変更しないこと\n' +
+               '- 外部CDN・サードパーティスクリプトの追加は、用途と取得元を明示してから行うこと\n' +
+               '- XSS / CSRF などの基本的なセキュリティに配慮したコードを書くこと\n';
+      default:
+        return '';
+    }
+  }
+
+  // ============================================================
+  // GetBuildEnvironment
+  // ============================================================
+  function getBuildEnvironment(pt) {
+    switch (pt) {
+      case 2:
+        return '| 項目 | 設定 |\n' +
+               '|------|------|\n' +
+               '| IDE / ビルド | VS2022 + MSBuild |\n' +
+               '| MFCリンク方式 | 共有DLL（static MFCではない） |\n' +
+               '| 文字セット | Unicode（`_UNICODE` / `UNICODE` 定義済み）。`CString` は実質 `CStringW` |\n' +
+               '| ターゲットアーキテクチャ | x64 |\n' +
+               '| C++標準 | C++17 |\n';
+      case 3:
+        return '| 項目 | 設定 |\n' +
+               '|------|------|\n' +
+               '| IDE / ビルド | VS2022 + MSBuild |\n' +
+               '| 文字セット | Unicode（`_UNICODE` / `UNICODE` 定義済み）。文字列は `TCHAR` / `WCHAR` |\n' +
+               '| ターゲットアーキテクチャ | x64 |\n' +
+               '| C++標準 | C++17 |\n';
+      case 0:
+        return '| 項目 | 設定 |\n' +
+               '|------|------|\n' +
+               '| IDE / ビルド | VS2022 + MSBuild / `dotnet build` |\n' +
+               '| フレームワーク | .NET 8 以降 |\n' +
+               '| 言語バージョン | C# 12 |\n' +
+               '| ターゲットアーキテクチャ | x64 |\n';
+      case 1:
+        return '| 項目 | 設定 |\n' +
+               '|------|------|\n' +
+               '| IDE / ビルド | VS2022 + MSBuild / `dotnet build` |\n' +
+               '| フレームワーク | .NET 8 以降 |\n' +
+               '| 言語バージョン | C# 12 |\n' +
+               '| アーキテクチャ方針 | MVVM |\n' +
+               '| ターゲットアーキテクチャ | x64 |\n';
+      case 4:
+        return '| 項目 | 設定 |\n' +
+               '|------|------|\n' +
+               '| ランタイム | Node.js（LTS） |\n' +
+               '| パッケージ管理 | npm / yarn（プロジェクト方針に従う） |\n' +
+               '| ビルドツール | （プロジェクトで決定） |\n' +
+               '| 実行環境 | モダンブラウザ |\n';
+      default:
+        return '';
+    }
+  }
+
+  // ============================================================
+  // GetCodingRules
+  // ============================================================
+  function getCodingRules(pt) {
+    switch (pt) {
+      case 2:
+        return '- 文字列リテラルは `_T("...")` または `L"..."` で統一する。生の `"..."` は使わない\n' +
+               '- DDX/DDVの向きに注意する\n' +
+               '  - `UpdateData(TRUE)`：画面 → 変数（取得）\n' +
+               '  - `UpdateData(FALSE)`：変数 → 画面（設定）\n' +
+               '- リソースID命名規則を守る：`IDD_`（ダイアログ）／`IDC_`（コントロール）／`IDR_`（リソース）\n' +
+               '- `new` した `CWnd` 派生オブジェクトの破棄責任・親子ウィンドウの所有権を明示的に管理する\n' +
+               '- エラー処理の方針はプロジェクト内で統一する（MFC例外 `CException` 派生 / 標準例外のどちらかに寄せる）\n' +
+               '- ファイル出力はUTF-8（BOMの有無はプロジェクト方針に合わせる）\n';
+      case 3:
+        return '- 文字列リテラルは `_T("...")` または `L"..."` で統一する。生の `"..."` は使わない\n' +
+               '- ハンドル変数は使用後に必ず `Close*` / `Destroy*` / `Release*` で解放する\n' +
+               '- `GetDC` / `BeginPaint` は対応する `ReleaseDC` / `EndPaint` と必ずペアにする\n' +
+               '- メッセージ処理関数の戻り値（`LRESULT`）を正しく返す\n' +
+               '- API戻り値・`GetLastError()` を確認し、失敗時の挙動を明示する\n';
+      case 0:
+        return '- 命名規則は .NET 標準（型・メソッド・プロパティは PascalCase、フィールドは `_camelCase`）\n' +
+               '- I/O・長時間処理は `async` / `await` を使い、UIスレッドをブロックしない\n' +
+               '- nullable 参照型を有効化し、null 安全を意識する\n' +
+               '- リソース（`Form` / `Stream` / `IDisposable`）は `using` で確実に破棄する\n' +
+               '- ファイル出力はUTF-8（BOMの有無はプロジェクト方針に合わせる）\n';
+      case 1:
+        return '- 命名規則は .NET 標準（型・メソッド・プロパティは PascalCase、フィールドは `_camelCase`）\n' +
+               '- ViewModelは `INotifyPropertyChanged` を実装し、ロジックはここに集約する\n' +
+               '- `ICommand`（`RelayCommand` 等）でユーザー操作をバインドする\n' +
+               '- I/O・長時間処理は `async` / `await`、UI更新は `Dispatcher` 経由で行う\n' +
+               '- リソース（`Stream` / `IDisposable`）は `using` で確実に破棄する\n';
+      case 4:
+        return '- ES2020以降の構文を使用する。`var` は使わず `const` / `let` を使う\n' +
+               '- 命名規則：変数・関数は camelCase、コンポーネント・クラスは PascalCase、定数は UPPER_SNAKE_CASE\n' +
+               '- 非同期処理は `async` / `await` を使用する\n' +
+               '- 入力値のサニタイズ・XSS対策を行う\n' +
+               '- ソースの文字コードはUTF-8\n';
+      default:
+        return '';
+    }
+  }
+
+  // ============================================================
+  // GenerateCLAUDE
+  // ============================================================
+  function generateCLAUDE(data) {
+    var strPlatform = getPlatformName(data.platform);
+    var s = '';
+
+    // --- ヘッダ・プロジェクト概要 ---
+    s += '# CLAUDE.md — プロジェクト指示書\n\n';
+    s += '## プロジェクト概要\n\n';
+    s += '- **プロジェクト名**：' + data.strProjectName + '\n';
+    s += '- **目的**：' + data.strPurpose + '\n';
+    s += '- **担当者**：' + data.strOwner + '\n';
+    s += '- **実装言語**：' + strPlatform + '\n\n';
+    s += '---\n\n';
+
+    // --- Claudeへの基本指示 ---
+    s += '## Claudeへの基本指示\n\n';
+    s += '- 応答・コメントは**日本語**で統一すること\n';
+    s += '- コードのコメントも日本語で記述すること\n';
+    s += '- 不明点があれば作業前に必ず確認すること\n';
+    s += '- 破壊的変更（ファイル削除・上書き）は事前に報告し、承認を得てから実行すること\n';
+    s += '- タスク完了時は `tasks/tasklist.md` の該当項目をチェック済みに更新すること\n';
+    if (!isEmpty(data.strClaudeBasic)) {
+      s += '- ' + data.strClaudeBasic + '\n';
+    }
+    s += '\n';
+
+    // --- 実装言語別 行動規約（重要） ---
+    var strGuidelines = getPlatformGuidelines(data.platform);
+    if (!isEmpty(strGuidelines)) {
+      s += '### ' + strPlatform + '作業時の行動規約（重要）\n\n';
+      s += strGuidelines;
+      s += '\n';
+    }
+
+    s += '---\n\n';
+
+    // --- ビルド環境・前提 ---
+    var strBuildEnv = getBuildEnvironment(data.platform);
+    if (!isEmpty(strBuildEnv)) {
+      s += '## ビルド環境・前提（変更不可）\n\n';
+      s += strBuildEnv;
+      s += '\n---\n\n';
+    }
+
+    // --- 実装言語別 コーディング規約 ---
+    var strCodingRules = getCodingRules(data.platform);
+    if (!isEmpty(strCodingRules)) {
+      s += '## ' + strPlatform + 'コーディング規約\n\n';
+      s += strCodingRules;
+      s += '\n> 注：実ファイル（リソース定義・各クラス）の内容はこのファイルに転記しない（古くなると害になるため）。\n';
+      s += '> 作業のたびに実ファイルを参照すること。\n\n';
+      s += '---\n\n';
+    }
+
+    // --- ディレクトリ構成 ---
+    s += '## ディレクトリ構成\n\n';
+    s += '```\n';
+    s += '.\n';
+    s += '├── CLAUDE.md              # この指示ファイル\n';
+    s += '├── .steering/             # スペック駆動開発の仕様書群\n';
+    s += '│   ├── product.md         # プロダクト要件・ゴール定義\n';
+    s += '│   ├── structure.md       # アーキテクチャ・技術スタック\n';
+    s += '│   └── decisions.md       # 設計判断の記録（ADR）\n';
+    s += '├── tasks/\n';
+    s += '│   └── tasklist.md        # タスク一覧・進捗管理\n';
+    s += '├── docs/                  # 設計書・仕様書・メモ\n';
+    s += '└── src/                   # ソースコード\n';
+    s += '```\n\n';
+    s += '---\n\n';
+
+    // --- 開発フロー ---
+    s += '## 開発フロー（スペック駆動）\n\n';
+    s += '```\n';
+    s += '1. 要件定義  → .steering/product.md を更新\n';
+    s += '2. 設計      → .steering/structure.md を更新\n';
+    s += '3. タスク分解 → tasks/tasklist.md にタスクを追加\n';
+    s += '4. 実装      → タスクを上から順に実施（作業時の行動規約を厳守）\n';
+    s += '5. 確認      → タスクをチェック済みに更新\n';
+    s += '6. 設計判断  → .steering/decisions.md に記録\n';
+    s += '```\n';
+
+    // --- 禁止事項（ユーザー入力がある場合のみ） ---
+    if (!isEmpty(data.strClaudeProhibited)) {
+      s += '\n---\n\n';
+      s += '## 禁止事項\n\n';
+      s += '- ' + data.strClaudeProhibited + '\n';
+    }
+
+    return s;
+  }
+
+  // ============================================================
+  // GenerateProduct
+  // ============================================================
+  function generateProduct(data) {
+    var goal            = isEmpty(data.strGoal)            ? '（未記入）'        : data.strGoal;
+    var targetUser      = isEmpty(data.strTargetUser)      ? '（未記入）'        : data.strTargetUser;
+    var problem         = isEmpty(data.strProblem)         ? '（未記入）'        : data.strProblem;
+    var successCriteria = isEmpty(data.strSuccessCriteria) ? '- [ ] （未記入）'  : data.strSuccessCriteria;
+    var inScope         = isEmpty(data.strInScope)         ? '- （未記入）'      : data.strInScope;
+    var outScope        = isEmpty(data.strOutScope)        ? '- （未記入）'      : data.strOutScope;
+    var platformName    = getPlatformName(data.platform);
+
+    return (
+      '# product.md — プロダクト要件定義\n\n' +
+      '> **用途**：このプロジェクトが「何を・誰のために・なぜ作るか」を定義する。\n' +
+      '> Claudeはタスク実施前にこのファイルを参照し、目的から外れた実装をしないこと。\n\n' +
+      '---\n\n' +
+      '## ゴール\n\n' + goal + '\n\n' +
+      '## ターゲットユーザー\n\n' + targetUser + '\n\n' +
+      '## 解決したい課題\n\n' + problem + '\n\n' +
+      '## 成功の定義（完了条件）\n\n' + successCriteria + '\n\n' +
+      '---\n\n' +
+      '## スコープ\n\n' +
+      '### In Scope（対象）\n' + inScope + '\n\n' +
+      '### Out of Scope（対象外）\n' + outScope + '\n\n' +
+      '---\n\n' +
+      '## 制約条件\n\n' +
+      '| 項目 | 内容 |\n' +
+      '|------|------|\n' +
+      '| 言語・環境 | ' + platformName + ' |\n' +
+      '| 使用ライブラリ | （未記入） |\n' +
+      '| 納期 | （未記入） |\n' +
+      '| その他 | （未記入） |\n'
+    );
+  }
+
+  // ============================================================
+  // GenerateStructure
+  // ============================================================
+  function generateStructure(data) {
+    var techStack    = getTechStackTemplate(data.platform);
+    var note         = isEmpty(data.strTechStackNote) ? '' : ('### 補足\n\n' + data.strTechStackNote);
+    var namingRules  = isEmpty(data.strNamingRules)
+        ? '| ファイル名 | （未記入） | |\n| 関数名 | （未記入） | |\n| 変数名 | （未記入） | |'
+        : data.strNamingRules;
+    var codingRules  = isEmpty(data.strCodingRules)  ? '- （未記入）'                       : data.strCodingRules;
+    var dataFlow     = isEmpty(data.strDataFlow)     ? '（入力） → （処理） → （出力）'    : data.strDataFlow;
+    var externalDeps = isEmpty(data.strExternalDeps) ? '| （未記入） | | |'                : data.strExternalDeps;
+
+    return (
+      '# structure.md — アーキテクチャ・技術スタック\n\n' +
+      '> **用途**：技術的な構成・設計方針を定義する。\n' +
+      '> Claudeは実装前にこのファイルを確認し、方針に従ったコードを書くこと。\n\n' +
+      '---\n\n' +
+      '## 技術スタック\n\n' +
+      techStack + '\n\n' +
+      note + '\n\n' +
+      '---\n\n' +
+      '## 命名規則\n\n' +
+      '| 対象 | 規則 | 例 |\n' +
+      '|------|------|----|  \n' +   // ← 行末2スペースは MFC 版テンプレに合わせて保持
+      namingRules + '\n\n' +
+      '---\n\n' +
+      '## コーディング規約\n\n' +
+      codingRules + '\n\n' +
+      '---\n\n' +
+      '## データフロー\n\n' +
+      '```\n' + dataFlow + '\n```\n\n' +
+      '---\n\n' +
+      '## 外部依存・連携\n\n' +
+      '| サービス／ファイル | 用途 | 備考 |\n' +
+      '|--------------------|------|------|\n' +
+      externalDeps + '\n'
+    );
+  }
+
+  // ============================================================
+  // GenerateDecisions
+  // ============================================================
+  function generateDecisions(data) {
+    var platformName = getPlatformName(data.platform);
+    return (
+      '# decisions.md — 設計判断の記録（ADR）\n\n' +
+      '> **用途**：「なぜこの設計にしたか」を記録する。\n' +
+      '> 後から見返したとき・Claudeが判断に迷ったときの根拠として参照する。\n\n' +
+      '---\n\n' +
+      '## 記録フォーマット\n\n' +
+      '```\n' +
+      '## ADR-XXX: タイトル\n' +
+      '- **日付**：YYYY-MM-DD\n' +
+      '- **状態**：提案中 / 採用 / 却下 / 廃止\n' +
+      '- **背景**：なぜこの判断が必要だったか\n' +
+      '- **決定内容**：何を選んだか\n' +
+      '- **却下した選択肢**：何を選ばなかったか・理由\n' +
+      '- **影響**：この決定による制約・副作用\n' +
+      '```\n\n' +
+      '---\n\n' +
+      '## ADR-001: プラットフォームの選択\n\n' +
+      '- **日付**：（記入してください）\n' +
+      '- **状態**：採用\n' +
+      '- **背景**：プロジェクトのターゲット環境を決める必要があった\n' +
+      '- **決定内容**：' + platformName + ' を採用\n' +
+      '- **却下した選択肢**：（未記入）\n' +
+      '- **影響**：' + platformName + ' に最適化したコードを書くこと\n\n' +
+      '---\n\n' +
+      '<!-- 以下に新しいADRを追加していく -->\n'
+    );
+  }
+
+  // ============================================================
+  // GenerateTasklist
+  // ============================================================
+  function generateTasklist(data) {
+    var s = '';
+    s += '# tasklist.md — タスク一覧\n\n';
+    s += '> **運用ルール**\n';
+    s += '> - タスク完了時は `[ ]` を `[x]` に変更する\n';
+    s += '> - 新しいタスクは該当フェーズの末尾に追加する\n';
+    s += '> - 優先度：🔴 高 / 🟡 中 / 🟢 低\n\n';
+    s += '---\n\n';
+    s += '## フェーズ1：仕様定義\n\n';
+    s += '- [ ] 🔴 `.steering/product.md` にゴール・要件を記入する\n';
+    s += '- [ ] 🔴 `.steering/structure.md` に技術スタックを記入する\n';
+    s += '- [ ] 🟡 スコープ（In / Out）を確定する\n';
+    s += '- [ ] 🟡 完了条件を具体的に定義する\n';
+
+    if (!isEmpty(data.strTasksPhase1)) {
+      s += data.strTasksPhase1 + '\n';
+    }
+
+    s += '\n## フェーズ2：設計\n\n';
+    s += '- [ ] 🔴 ディレクトリ構成を確定し `structure.md` に反映する\n';
+    s += '- [ ] 🔴 データフローを図示する\n';
+    s += '- [ ] 🟡 命名規則・コーディング規約を決める\n';
+    s += '- [ ] 🟢 `decisions.md` に初期設計判断を記録する\n';
+
+    if (!isEmpty(data.strTasksPhase2)) {
+      s += data.strTasksPhase2 + '\n';
+    }
+
+    s += '\n## フェーズ3：実装\n\n';
+    s += '- [ ] （実装タスクをここに追加する）\n';
+
+    if (!isEmpty(data.strTasksPhase3)) {
+      s += data.strTasksPhase3 + '\n';
+    }
+
+    s += '\n## フェーズ4：テスト・確認\n\n';
+    s += '- [ ] 動作確認（手動）\n';
+    s += '- [ ] エラーハンドリングの確認\n';
+    s += '- [ ] ドキュメント最終更新\n\n';
+    s += '## フェーズ5：完了\n\n';
+    s += '- [ ] `product.md` の成功条件をすべて満たしていることを確認\n';
+    s += '- [ ] READMEを作成・更新する\n';
+    s += '- [ ] GitHubにプッシュ\n\n';
+    s += '---\n\n';
+    s += '## 完了済み\n\n';
+    s += '<!-- 完了タスクをここに移動（任意） -->\n';
+
+    return s;
+  }
+
+  // GenerateAll 相当：5ファイル分を一括生成
+  function generateAll(data) {
+    return [
+      generateCLAUDE(data),
+      generateProduct(data),
+      generateStructure(data),
+      generateDecisions(data),
+      generateTasklist(data)
+    ];
+  }
+
+  // ============================================================
+  // UI 制御
+  // ============================================================
+  var lastOutputs = null;
+
+  function renderSelected() {
+    if (!lastOutputs) return;
+    var idx = parseInt($('fileSelect').value, 10);
+    $('outputText').value = lastOutputs[idx];
+  }
+
+  $('generateBtn').addEventListener('click', function() {
+    var data = collectData();
+    lastOutputs = generateAll(data);
+    renderSelected();
+  });
+
+  // 「表示ファイル」プルダウン切り替え時にプレビュー更新
+  $('fileSelect').addEventListener('change', renderSelected);
+
+  // 初期表示：ページ読み込み時点の入力値（既定値）でいったん生成し、
+  // 既定選択のファイル（CLAUDE.md）をプレビューに表示する。
+  // MFC 版のプレビュータブが「タブを開いた瞬間に現在の入力値で表示する」
+  // 挙動と合わせるため。
+  lastOutputs = generateAll(collectData());
+  renderSelected();
+})();
+</script>
+</body>
+</html>
