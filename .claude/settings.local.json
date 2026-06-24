@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mkdir -p /workspaces/prompt_editor/web)",
+      "Bash(node -e ' *)",
+      "Bash(node /tmp/claude-1000/-workspaces-prompt-editor/52b129c8-dbbe-4f0e-abe0-11416dcec9d0/scratchpad/test_gen.js)"
+    ],
+    "additionalDirectories": [
+      "/workspaces/prompt_editor"
+    ]
+  }
+}
