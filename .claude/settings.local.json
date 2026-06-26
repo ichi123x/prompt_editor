@@ -1,6 +1,9 @@
 {
   "permissions": {
     "allow": [
+      "Bash(cp /workspaces/prompt_editor/CLAUDE.md /workspaces/prompt_editor/vs_proj_files/CLAUDE.md && echo \"コピー完了:\" && ls -la /workspaces/prompt_editor/vs_proj_files/CLAUDE.md)",
+      "Bash(python3 -c ' *)",
+      "Bash(python3)"
       "Bash(mkdir -p /workspaces/prompt_editor/web)",
       "Bash(node -e ' *)",
       "Bash(node /tmp/claude-1000/-workspaces-prompt-editor/52b129c8-dbbe-4f0e-abe0-11416dcec9d0/scratchpad/test_gen.js)"

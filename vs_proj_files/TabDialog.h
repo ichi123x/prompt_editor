@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 // TabDialog.h
 
 #include "afxdialogex.h"

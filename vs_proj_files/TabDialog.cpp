@@ -1,4 +1,4 @@
-// TabDialog.cpp
+﻿// TabDialog.cpp
 #include "pch.h"
 #include "TabDialog.h"
 #include "PromptEditorDlg.h"
