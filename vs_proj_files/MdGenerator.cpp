@@ -1,7 +1,9 @@
 ﻿// MdGenerator.cpp — Markdownファイル生成クラス実装
 #include "pch.h"
 #include "MdGenerator.h"
+#include "resource.h"   // IDR_CLAUDE_TEMPLATE
 #include <direct.h>
+#include <vector>
 
 CMdGenerator::CMdGenerator() {}
 CMdGenerator::~CMdGenerator() {}
@@ -27,6 +29,9 @@ BOOL CMdGenerator::GenerateAll(const ProjectData& data)
     if (!EnsureDirectory(strBase + _T(".steering"))) return FALSE;
     if (!EnsureDirectory(strBase + _T("tasks")))     return FALSE;
 
+    // skills フォルダをそのままコピー
+    if (!CopySkillsFolder(strBase)) return FALSE;
+
     // 各ファイル生成・書き出し
     if (!WriteFileUtf8(strBase + _T("CLAUDE.md"),                 GenerateCLAUDE(data)))    return FALSE;
     if (!WriteFileUtf8(strBase + _T(".steering\\product.md"),     GenerateProduct(data)))   return FALSE;
@@ -38,104 +43,147 @@ BOOL CMdGenerator::GenerateAll(const ProjectData& data)
 }
 
 // ============================================================
+// 参照CLAUDE.md（RCDATAリソース）を読み込む
+//   ビルド時に vs_proj_files\CLAUDE.md を exe へ埋め込んでいる
+//   （UTF-8）。読み込んで UTF-16(CString) に変換して返す。
+// ============================================================
+CString CMdGenerator::LoadClaudeTemplate()
+{
+    HMODULE hMod = AfxGetResourceHandle();
+
+    HRSRC hRes = ::FindResource(hMod, MAKEINTRESOURCE(IDR_CLAUDE_TEMPLATE), RT_RCDATA);
+    if (hRes == nullptr) return _T("");
+
+    HGLOBAL hData = ::LoadResource(hMod, hRes);
+    if (hData == nullptr) return _T("");
+
+    DWORD dwSize = ::SizeofResource(hMod, hRes);
+    const char* pData = static_cast<const char*>(::LockResource(hData));
+    if (pData == nullptr || dwSize == 0) return _T("");
+
+    // UTF-8 BOM があれば読み飛ばす
+    const char* pStart = pData;
+    DWORD dwLen = dwSize;
+    if (dwSize >= 3 &&
+        (unsigned char)pData[0] == 0xEF &&
+        (unsigned char)pData[1] == 0xBB &&
+        (unsigned char)pData[2] == 0xBF)
+    {
+        pStart += 3;
+        dwLen  -= 3;
+    }
+
+    // UTF-8 → UTF-16(CString)
+    int nWide = ::MultiByteToWideChar(CP_UTF8, 0, pStart, (int)dwLen, nullptr, 0);
+    if (nWide <= 0) return _T("");
+
+    CString s;
+    ::MultiByteToWideChar(CP_UTF8, 0, pStart, (int)dwLen, s.GetBuffer(nWide), nWide);
+    s.ReleaseBuffer(nWide);
+    return s;
+}
+
+// ============================================================
 // CLAUDE.md 生成
+//   参照CLAUDE.md（埋め込みリソース）をベースとし、
+//   「プロジェクト概要」セクションのみ入力値で差し替える。
+//   概要以外のセクションは参照CLAUDE.mdの内容をそのまま出力する。
 // ============================================================
 CString CMdGenerator::GenerateCLAUDE(const ProjectData& data)
 {
-    CString s;
-    CString strPlatform = GetPlatformName(data.platform);
+    CString s = LoadClaudeTemplate();
 
-    // --- ヘッダ・プロジェクト概要 ---
-    CString strHead;
-    strHead.Format(
-        _T("# CLAUDE.md — プロジェクト指示書\n\n")
-        _T("## プロジェクト概要\n\n")
-        _T("- **プロジェクト名**：%s\n")
-        _T("- **目的**：%s\n")
-        _T("- **担当者**：%s\n")
-        _T("- **実装言語**：%s\n\n")
-        _T("---\n\n"),
-        (LPCTSTR)data.strProjectName,
-        (LPCTSTR)data.strPurpose,
-        (LPCTSTR)data.strOwner,
-        (LPCTSTR)strPlatform
-    );
-    s += strHead;
+    // リソースが読めなかった場合のフォールバック（最小構成の概要のみ）
+    if (s.IsEmpty())
+    {
+        s.Format(
+            _T("# CLAUDE.md — プロジェクト指示書\n\n")
+            _T("## プロジェクト概要\n\n")
+            _T("- **プロジェクト名**：%s\n")
+            _T("- **目的**：%s\n")
+            _T("- **担当者**：%s\n")
+            _T("- **プラットフォーム**：%s\n"),
+            (LPCTSTR)data.strProjectName,
+            (LPCTSTR)data.strPurpose,
+            (LPCTSTR)data.strOwner,
+            (LPCTSTR)GetPlatformName(data.platform));
+        return s;
+    }
 
-    // --- Claudeへの基本指示 ---
-    s += _T("## Claudeへの基本指示\n\n");
-    s += _T("- 応答・コメントは**日本語**で統一すること\n");
-    s += _T("- コードのコメントも日本語で記述すること\n");
-    s += _T("- 不明点があれば作業前に必ず確認すること\n");
-    s += _T("- 破壊的変更（ファイル削除・上書き）は事前に報告し、承認を得てから実行すること\n");
-    s += _T("- タスク完了時は `tasks/tasklist.md` の該当項目をチェック済みに更新すること\n");
+    // 改行コードを LF に統一（他の生成ファイルと揃え、以降の検索を安定させる）
+    s.Replace(_T("\r\n"), _T("\n"));
+
+    // --- 「## プロジェクト概要」セクションを入力値で差し替える ---
+    //   概要セクション（## プロジェクト概要 ～ 次のH2見出し直前まで）を削除し、
+    //   入力値（プロジェクト名・目的・担当者・プラットフォーム）に置き換える。
+    int idxStart = s.Find(_T("## プロジェクト概要"));
+    if (idxStart >= 0)
+    {
+        int idxNext = s.Find(_T("\n## "), idxStart + 1);   // 次のH2見出し位置
+
+        CString strHeader = s.Left(idxStart);     // 概要より前（タイトル行など）
+        CString strRest;                          // 概要の次の見出し以降（無ければ空）
+        if (idxNext >= 0)
+            strRest = s.Mid(idxNext + 1);
+
+        CString strOverview;
+        strOverview.Format(
+            _T("## プロジェクト概要\n\n")
+            _T("- **プロジェクト名**：%s\n")
+            _T("- **目的**：%s\n")
+            _T("- **担当者**：%s\n")
+            _T("- **プラットフォーム**：%s\n\n")
+            _T("---\n\n"),
+            (LPCTSTR)data.strProjectName,
+            (LPCTSTR)data.strPurpose,
+            (LPCTSTR)data.strOwner,
+            (LPCTSTR)GetPlatformName(data.platform));
+
+        s = strHeader + strOverview + strRest;
+    }
+
+    // --- ディレクトリ構成ツリーを動的生成して差し替える ---
+    //   「## ディレクトリ構成」内の ``` ～ ``` ブロックを、実際の出力構成で置き換える。
+    //   これにより vs_proj_files/ や prompt_editor.sln 等（ツール自身の構成）は列挙されない。
+    int idxDir = s.Find(_T("## ディレクトリ構成"));
+    if (idxDir >= 0)
+    {
+        int idxFenceOpen  = s.Find(_T("```"), idxDir);                          // 開始フェンス
+        int idxNL         = (idxFenceOpen >= 0) ? s.Find(_T("\n"), idxFenceOpen) : -1;
+        int idxFenceClose = (idxNL >= 0) ? s.Find(_T("```"), idxNL + 1) : -1;   // 終了フェンス
+        if (idxNL >= 0 && idxFenceClose >= 0)
+        {
+            CString strBefore = s.Left(idxNL + 1);     // 開始フェンス行（```）まで
+            CString strAfter  = s.Mid(idxFenceClose);  // 終了フェンス（```）以降
+            s = strBefore + BuildDirectoryTree(data.strProjectName) + strAfter;
+        }
+    }
+
+    // 念のためトップフォルダ名を差し替え（動的差し替えが成功していれば該当なし＝無害）
+    if (!data.strProjectName.IsEmpty())
+        s.Replace(_T("prompt_editor/"), data.strProjectName + _T("/"));
+
+    // --- CLAUDE.mdタブの「追加する基本指示」を基本指示セクション末尾へ挿入 ---
     if (!data.strClaudeBasic.IsEmpty())
-        s += _T("- ") + data.strClaudeBasic + _T("\n");
-    s += _T("\n");
-
-    // --- 実装言語別 行動規約（重要） ---
-    CString strGuidelines = GetPlatformGuidelines(data.platform);
-    if (!strGuidelines.IsEmpty())
     {
-        s += _T("### ") + strPlatform + _T("作業時の行動規約（重要）\n\n");
-        s += strGuidelines;
-        s += _T("\n");
+        int idxBasic = s.Find(_T("## Claudeへの基本指示"));
+        if (idxBasic >= 0)
+        {
+            // 基本指示セクション末尾の区切り（空行+「---」）の直前へ挿入
+            int idxSep = s.Find(_T("\n\n---"), idxBasic);
+            CString strAdd = _T("- ") + data.strClaudeBasic + _T("\n");
+            if (idxSep >= 0)
+                s.Insert(idxSep + 1, strAdd);
+            else
+                s += _T("\n") + strAdd;
+        }
     }
 
-    s += _T("---\n\n");
-
-    // --- ビルド環境・前提 ---
-    CString strBuildEnv = GetBuildEnvironment(data.platform);
-    if (!strBuildEnv.IsEmpty())
-    {
-        s += _T("## ビルド環境・前提（変更不可）\n\n");
-        s += strBuildEnv;
-        s += _T("\n---\n\n");
-    }
-
-    // --- 実装言語別 コーディング規約 ---
-    CString strCodingRules = GetCodingRules(data.platform);
-    if (!strCodingRules.IsEmpty())
-    {
-        s += _T("## ") + strPlatform + _T("コーディング規約\n\n");
-        s += strCodingRules;
-        s += _T("\n> 注：実ファイル（リソース定義・各クラス）の内容はこのファイルに転記しない（古くなると害になるため）。\n");
-        s += _T("> 作業のたびに実ファイルを参照すること。\n\n");
-        s += _T("---\n\n");
-    }
-
-    // --- ディレクトリ構成 ---
-    s += _T("## ディレクトリ構成\n\n");
-    s += _T("```\n");
-    s += _T(".\n");
-    s += _T("├── CLAUDE.md              # この指示ファイル\n");
-    s += _T("├── .steering/             # スペック駆動開発の仕様書群\n");
-    s += _T("│   ├── product.md         # プロダクト要件・ゴール定義\n");
-    s += _T("│   ├── structure.md       # アーキテクチャ・技術スタック\n");
-    s += _T("│   └── decisions.md       # 設計判断の記録（ADR）\n");
-    s += _T("├── tasks/\n");
-    s += _T("│   └── tasklist.md        # タスク一覧・進捗管理\n");
-    s += _T("├── docs/                  # 設計書・仕様書・メモ\n");
-    s += _T("└── src/                   # ソースコード\n");
-    s += _T("```\n\n");
-    s += _T("---\n\n");
-
-    // --- 開発フロー ---
-    s += _T("## 開発フロー（スペック駆動）\n\n");
-    s += _T("```\n");
-    s += _T("1. 要件定義  → .steering/product.md を更新\n");
-    s += _T("2. 設計      → .steering/structure.md を更新\n");
-    s += _T("3. タスク分解 → tasks/tasklist.md にタスクを追加\n");
-    s += _T("4. 実装      → タスクを上から順に実施（作業時の行動規約を厳守）\n");
-    s += _T("5. 確認      → タスクをチェック済みに更新\n");
-    s += _T("6. 設計判断  → .steering/decisions.md に記録\n");
-    s += _T("```\n");
-
-    // --- 禁止事項（ユーザー入力がある場合のみ） ---
+    // --- CLAUDE.mdタブの「追加する禁止事項」を末尾に追記 ---
     if (!data.strClaudeProhibited.IsEmpty())
     {
-        s += _T("\n---\n\n");
-        s += _T("## 禁止事項\n\n");
+        if (s.Right(1) != _T("\n")) s += _T("\n");
+        s += _T("\n---\n\n## 禁止事項\n\n");
         s += _T("- ") + data.strClaudeProhibited + _T("\n");
     }
 
@@ -626,4 +674,127 @@ BOOL CMdGenerator::EnsureDirectory(const CString& strPath)
 
     AfxMessageBox(_T("フォルダの作成に失敗しました：\n") + strPath, MB_OK | MB_ICONERROR);
     return FALSE;
+}
+
+// ============================================================
+// コピー元 skills フォルダの場所を返す
+//   exe と同じフォルダから始めて、見つからなければ親へ遡って探索する
+//   （開発時に exe が x64\Debug 等にあっても skills を拾えるように）
+// ============================================================
+CString CMdGenerator::GetSkillsSourceDir()
+{
+    TCHAR szPath[MAX_PATH] = { 0 };
+    ::GetModuleFileName(nullptr, szPath, MAX_PATH);
+
+    CString strDir = szPath;
+    int p = strDir.ReverseFind(_T('\\'));
+    if (p >= 0) strDir = strDir.Left(p);   // exe のあるフォルダ
+
+    for (int i = 0; i < 5; ++i)
+    {
+        CString strCand = strDir + _T("\\skills");
+        DWORD attr = ::GetFileAttributes(strCand);
+        if (attr != INVALID_FILE_ATTRIBUTES && (attr & FILE_ATTRIBUTE_DIRECTORY))
+            return strCand;
+
+        int q = strDir.ReverseFind(_T('\\'));
+        if (q < 0) break;
+        strDir = strDir.Left(q);           // 1つ上の階層へ
+    }
+    return _T("");
+}
+
+// ============================================================
+// skills フォルダを出力先へそのままコピーする
+// ============================================================
+BOOL CMdGenerator::CopySkillsFolder(const CString& strBaseOut)
+{
+    CString strSrc = GetSkillsSourceDir();
+    if (strSrc.IsEmpty())
+    {
+        AfxMessageBox(
+            _T("skills フォルダが見つかりませんでした。\n")
+            _T("exe と同じ場所（または上位フォルダ）に skills/ を配置してください。"),
+            MB_OK | MB_ICONWARNING);
+        return FALSE;
+    }
+    return CopyDirectoryRecursive(strSrc, strBaseOut + _T("skills"));
+}
+
+// ============================================================
+// フォルダを再帰的にコピーする
+// ============================================================
+BOOL CMdGenerator::CopyDirectoryRecursive(const CString& strSrcDir, const CString& strDstDir)
+{
+    if (!EnsureDirectory(strDstDir)) return FALSE;
+
+    CFileFind finder;
+    BOOL bWorking = finder.FindFile(strSrcDir + _T("\\*"));
+    while (bWorking)
+    {
+        bWorking = finder.FindNextFile();
+        if (finder.IsDots()) continue;
+
+        CString strName = finder.GetFileName();
+        CString strSrc  = strSrcDir + _T("\\") + strName;
+        CString strDst  = strDstDir + _T("\\") + strName;
+
+        if (finder.IsDirectory())
+        {
+            if (!CopyDirectoryRecursive(strSrc, strDst)) { finder.Close(); return FALSE; }
+        }
+        else
+        {
+            if (!::CopyFile(strSrc, strDst, FALSE))      { finder.Close(); return FALSE; }
+        }
+    }
+    finder.Close();
+    return TRUE;
+}
+
+// ============================================================
+// 出力ディレクトリ構成のツリー文字列を生成する
+//   実際に出力する構成（CLAUDE.md / skills + サブフォルダ / .steering / tasks）を反映
+// ============================================================
+CString CMdGenerator::BuildDirectoryTree(const CString& strProjectName)
+{
+    CString strTop = strProjectName;
+    if (strTop.IsEmpty()) strTop = _T("（プロジェクト名）");
+
+    CString t;
+    t += strTop + _T("/\n");
+    t += _T("├── CLAUDE.md\n");
+
+    // skills/（コピー元のサブフォルダを列挙）
+    std::vector<CString> subs;
+    CString strSrc = GetSkillsSourceDir();
+    if (!strSrc.IsEmpty())
+    {
+        CFileFind finder;
+        BOOL bWorking = finder.FindFile(strSrc + _T("\\*"));
+        while (bWorking)
+        {
+            bWorking = finder.FindNextFile();
+            if (finder.IsDots() || !finder.IsDirectory()) continue;
+            subs.push_back(finder.GetFileName());
+        }
+        finder.Close();
+    }
+
+    t += _T("├── skills/\n");
+    for (size_t i = 0; i < subs.size(); ++i)
+    {
+        BOOL bLast = (i == subs.size() - 1);
+        t += _T("│   ") + CString(bLast ? _T("└── ") : _T("├── ")) + subs[i] + _T("/\n");
+        t += _T("│   ") + CString(bLast ? _T("    ") : _T("│   ")) + _T("└── SKILL.md\n");
+    }
+
+    t += _T("├── .steering/\n");
+    t += _T("│   ├── product.md\n");
+    t += _T("│   ├── structure.md\n");
+    t += _T("│   └── decisions.md\n");
+    t += _T("└── tasks/\n");
+    t += _T("    └── tasklist.md\n");
+
+    return t;
 }

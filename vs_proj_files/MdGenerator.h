@@ -62,6 +62,9 @@ public:
     CString GeneratePreview(const ProjectData& data, int nIndex);
 
 private:
+    // 参照CLAUDE.md（RCDATAリソースに埋め込んだ生成ベース）を読み込む
+    CString LoadClaudeTemplate();
+
     // 各mdファイルの内容生成
     CString GenerateCLAUDE(const ProjectData& data);
     CString GenerateProduct(const ProjectData& data);
@@ -83,6 +86,18 @@ private:
 
     // プラットフォーム別のコーディング規約を返す（CLAUDE.md用）
     CString GetCodingRules(PlatformType pt);
+
+    // 出力ディレクトリ構成のツリー文字列を生成（プロジェクト名をトップに）
+    CString BuildDirectoryTree(const CString& strProjectName);
+
+    // コピー元 skills フォルダの場所を返す（exe隣→親へ遡って探索。無ければ空）
+    CString GetSkillsSourceDir();
+
+    // skills フォルダを出力先へそのままコピーする
+    BOOL CopySkillsFolder(const CString& strBaseOut);
+
+    // フォルダを再帰的にコピーする
+    BOOL CopyDirectoryRecursive(const CString& strSrcDir, const CString& strDstDir);
 
     // UTF-8（BOMなし）でファイルに書き出す
     BOOL WriteFileUtf8(const CString& strPath, const CString& strContent);

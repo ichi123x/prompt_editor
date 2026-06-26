@@ -2,9 +2,9 @@
 
 ## プロジェクト概要
 
-- **プロジェクト名**：MyProject
-- **目的**：目的の説明
-- **担当者**：あなた
+- **プロジェクト名**：PROJECT Z
+- **目的**：ファイル検索ツール
+- **担当者**：ihira
 - **プラットフォーム**：C++ / MFC
 
 ---
@@ -21,16 +21,41 @@
 
 ## ディレクトリ構成
 
-ディレクトリ構成例:
+- ディレクトリ（skills/.steering/tasks）がない場合は新規作成する
+- ディレクトリ（skills/.steering/tasks）に該当するファイルがない場合、空で新規作成する
+```
+PROJECT Z/
+├── CLAUDE.md
+├── skills/
+│   ├── 00-common/
+│   │   └── SKILL.md
+│   ├── 01-cs-winforms/
+│   │   └── SKILL.md
+│   ├── 02-cs-wpf/
+│   │   └── SKILL.md
+│   ├── 03-cpp-mfc/
+│   │   └── SKILL.md
+│   ├── 04-cpp-win32/
+│   │   └── SKILL.md
+│   └── 05-web/
+│       └── SKILL.md
+├── .steering/
+│   ├── product.md
+│   ├── structure.md
+│   └── decisions.md
+└── tasks/
+    └── tasklist.md
+```
 
-./
-- CLAUDE.md
-- .steering/
-  - product.md
-  - structure.md
-  - decisions.md
-- tasks/
-  - tasklist.md
-- docs/
-- src/
+---
 
+## 開発フロー（スペック駆動）
+
+```
+1. 要件定義   → .steering/product.md を更新
+2. 設計       → .steering/structure.md を更新
+3. タスク分解  → tasks/tasklist.md にタスクを追加
+4. 実装       → タスクを上から順に実施（MFC作業時は上記の行動規約を厳守）
+5. 確認       → タスクをチェック済みに更新
+6. ビルド検証  → VS2022でビルド・動作確認、エラーはテキストで共有
+```

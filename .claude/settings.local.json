@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cp /workspaces/prompt_editor/CLAUDE.md /workspaces/prompt_editor/vs_proj_files/CLAUDE.md && echo \"コピー完了:\" && ls -la /workspaces/prompt_editor/vs_proj_files/CLAUDE.md)",
+      "Bash(python3 -c ' *)",
+      "Bash(python3)"
+    ],
+    "additionalDirectories": [
+      "/workspaces/prompt_editor"
+    ]
+  }
+}
