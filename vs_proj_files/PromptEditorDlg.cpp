@@ -3,7 +3,8 @@
 #include "PromptEditorDlg.h"
 #include "TabDialog.h"
 #include "resource.h"
-#include <ShlObj.h>   // SHBrowseForFolder
+#include <ShlObj.h>      // SHBrowseForFolder / SHCreateItemFromParsingName
+#include <ShObjIdl.h>   // IFileOpenDialog
 
 #pragma comment(lib, "Shell32.lib")
 
@@ -58,6 +59,7 @@ void CPromptEditorDlg::DoDataExchange(CDataExchange* pDX)
 }
 
 BEGIN_MESSAGE_MAP(CPromptEditorDlg, CDialogEx)
+    ON_WM_DESTROY()
     ON_BN_CLICKED(IDC_BUTTON_BROWSE,           &CPromptEditorDlg::OnBnClickedBrowse)
     ON_BN_CLICKED(IDC_BUTTON_GENERATE,         &CPromptEditorDlg::OnBnClickedGenerate)
     ON_BN_CLICKED(IDC_BUTTON_CLOSE,            &CPromptEditorDlg::OnBnClickedClose)
@@ -83,6 +85,11 @@ BOOL CPromptEditorDlg::OnInitDialog()
 
     // デフォルト値設定
     m_editOwner.SetWindowText(_T("ihira"));
+
+    // 前回の出力先パスをレジストリから復元
+    CString strSavedPath = AfxGetApp()->GetProfileString(_T("Settings"), _T("OutputPath"), _T(""));
+    if (!strSavedPath.IsEmpty())
+        m_editOutputPath.SetWindowText(strSavedPath);
 
     // ラジオボタン初期選択（MFC）
     CheckRadioButton(IDC_RADIO_WINFORMS, IDC_RADIO_WEB, IDC_RADIO_MFC);
@@ -171,22 +178,52 @@ void CPromptEditorDlg::OnTcnSelchangeTabMain(NMHDR* pNMHDR, LRESULT* pResult)
 
 // ============================================================
 // OnBnClickedBrowse — フォルダ参照
+//   IFileOpenDialog（Vista以降の推奨API）を使用する。
+//   SHBrowseForFolder の BFFM_SETEXPANDED は動作が不安定なため廃止し、
+//   IFileOpenDialog::SetFolder で初期フォルダを確実に指定する。
 // ============================================================
 void CPromptEditorDlg::OnBnClickedBrowse()
 {
-    BROWSEINFO bi = {};
-    bi.hwndOwner = GetSafeHwnd();
-    bi.lpszTitle = _T("出力先フォルダを選択してください");
-    bi.ulFlags   = BIF_RETURNONLYFSDIRS | BIF_NEWDIALOGSTYLE;
+    CString strCurrentPath;
+    m_editOutputPath.GetWindowText(strCurrentPath);
 
-    LPITEMIDLIST pidl = SHBrowseForFolder(&bi);
-    if (pidl)
+    IFileOpenDialog* pDlg = nullptr;
+    HRESULT hr = ::CoCreateInstance(CLSID_FileOpenDialog, nullptr,
+                                     CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pDlg));
+    if (FAILED(hr)) return;
+
+    // フォルダ選択モードに設定
+    DWORD dwFlags = 0;
+    pDlg->GetOptions(&dwFlags);
+    pDlg->SetOptions(dwFlags | FOS_PICKFOLDERS | FOS_FORCEFILESYSTEM);
+    pDlg->SetTitle(L"出力先フォルダを選択してください");
+
+    // 入力ボックスのパスを初期フォルダとして設定
+    if (!strCurrentPath.IsEmpty())
     {
-        TCHAR szPath[MAX_PATH] = {};
-        if (SHGetPathFromIDList(pidl, szPath))
-            m_editOutputPath.SetWindowText(szPath);
-        CoTaskMemFree(pidl);
+        IShellItem* pItem = nullptr;
+        if (SUCCEEDED(::SHCreateItemFromParsingName(strCurrentPath, nullptr, IID_PPV_ARGS(&pItem))))
+        {
+            pDlg->SetFolder(pItem);
+            pItem->Release();
+        }
     }
+
+    if (SUCCEEDED(pDlg->Show(GetSafeHwnd())))
+    {
+        IShellItem* pResult = nullptr;
+        if (SUCCEEDED(pDlg->GetResult(&pResult)))
+        {
+            PWSTR pszPath = nullptr;
+            if (SUCCEEDED(pResult->GetDisplayName(SIGDN_FILESYSPATH, &pszPath)))
+            {
+                m_editOutputPath.SetWindowText(pszPath);
+                CoTaskMemFree(pszPath);
+            }
+            pResult->Release();
+        }
+    }
+    pDlg->Release();
 }
 
 // ============================================================
@@ -290,6 +327,19 @@ void CPromptEditorDlg::OnBnClickedGenerate()
             (LPCTSTR)data.strOutputPath);
         AfxMessageBox(msg, MB_OK | MB_ICONINFORMATION);
     }
+}
+
+// ============================================================
+// OnDestroy — ダイアログ破棄時に出力先パスをレジストリへ保存する
+//   閉じるボタン・×ボタンどちらで閉じても確実に呼ばれる
+// ============================================================
+void CPromptEditorDlg::OnDestroy()
+{
+    CString strPath;
+    m_editOutputPath.GetWindowText(strPath);
+    AfxGetApp()->WriteProfileString(_T("Settings"), _T("OutputPath"), strPath);
+
+    CDialogEx::OnDestroy();
 }
 
 // ============================================================

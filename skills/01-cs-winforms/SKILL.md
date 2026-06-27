@@ -1,3 +1,8 @@
+---
+name: 01-cs-winforms
+description: C# / WinForms プロジェクト向けの開発ルール（行動規約、ビルド環境、デバッグ手順、コーディング規約）。WinForms ダイアログ・イベント作業時に参照する。00-common と併用する。
+---
+
 # 01-cs-winforms用 SKILL.md — 作業スキル指示書
 
 ---

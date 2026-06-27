@@ -1,3 +1,8 @@
+---
+name: 02-cs-wpf
+description: C# / WPF プロジェクト向けの開発ルール（行動規約、ビルド環境、デバッグ手順、コーディング規約）。WPF / MVVM・XAML 作業時に参照する。00-common と併用する。
+---
+
 # 02-cs-wpf用 SKILL.md — 作業スキル指示書
 
 ---

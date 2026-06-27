@@ -29,8 +29,8 @@ BOOL CMdGenerator::GenerateAll(const ProjectData& data)
     if (!EnsureDirectory(strBase + _T(".steering"))) return FALSE;
     if (!EnsureDirectory(strBase + _T("tasks")))     return FALSE;
 
-    // skills フォルダをそのままコピー
-    if (!CopySkillsFolder(strBase)) return FALSE;
+    // 選択プラットフォームの skills フォルダをコピー
+    if (!CopySkillsFolder(strBase, data.platform)) return FALSE;
 
     // 各ファイル生成・書き出し
     if (!WriteFileUtf8(strBase + _T("CLAUDE.md"),                 GenerateCLAUDE(data)))    return FALSE;
@@ -155,7 +155,7 @@ CString CMdGenerator::GenerateCLAUDE(const ProjectData& data)
         {
             CString strBefore = s.Left(idxNL + 1);     // 開始フェンス行（```）まで
             CString strAfter  = s.Mid(idxFenceClose);  // 終了フェンス（```）以降
-            s = strBefore + BuildDirectoryTree(data.strProjectName) + strAfter;
+            s = strBefore + BuildDirectoryTree(data.strProjectName, data.platform) + strAfter;
         }
     }
 
@@ -705,9 +705,27 @@ CString CMdGenerator::GetSkillsSourceDir()
 }
 
 // ============================================================
-// skills フォルダを出力先へそのままコピーする
+// プラットフォームに対応する skills サブフォルダ名を返す
 // ============================================================
-BOOL CMdGenerator::CopySkillsFolder(const CString& strBaseOut)
+CString CMdGenerator::GetPlatformSkillFolder(PlatformType pt)
+{
+    switch (pt)
+    {
+    case PlatformType::WinForms: return _T("01-cs-winforms");
+    case PlatformType::WPF:      return _T("02-cs-wpf");
+    case PlatformType::MFC:      return _T("03-cpp-mfc");
+    case PlatformType::Win32:    return _T("04-cpp-win32");
+    case PlatformType::Web:      return _T("05-web");
+    default:                     return _T("");
+    }
+}
+
+// ============================================================
+// 選択プラットフォームの skills フォルダを出力先へコピーする
+//   00-common/ は全プラットフォーム共通のため常にコピーし、
+//   選択プラットフォームのサブフォルダ（例：03-cpp-mfc/）のみ追加コピーする
+// ============================================================
+BOOL CMdGenerator::CopySkillsFolder(const CString& strBaseOut, PlatformType pt)
 {
     CString strSrc = GetSkillsSourceDir();
     if (strSrc.IsEmpty())
@@ -718,7 +736,33 @@ BOOL CMdGenerator::CopySkillsFolder(const CString& strBaseOut)
             MB_OK | MB_ICONWARNING);
         return FALSE;
     }
-    return CopyDirectoryRecursive(strSrc, strBaseOut + _T("skills"));
+
+    CString strDstBase = strBaseOut + _T("skills");
+    if (!EnsureDirectory(strDstBase)) return FALSE;
+
+    // 共通フォルダ（00-common）は常にコピー
+    CString strCommonSrc = strSrc + _T("\\00-common");
+    DWORD attr = ::GetFileAttributes(strCommonSrc);
+    if (attr != INVALID_FILE_ATTRIBUTES && (attr & FILE_ATTRIBUTE_DIRECTORY))
+    {
+        if (!CopyDirectoryRecursive(strCommonSrc, strDstBase + _T("\\00-common")))
+            return FALSE;
+    }
+
+    // 選択プラットフォームのフォルダのみコピー
+    CString strPlatFolder = GetPlatformSkillFolder(pt);
+    if (!strPlatFolder.IsEmpty())
+    {
+        CString strPlatSrc = strSrc + _T("\\") + strPlatFolder;
+        attr = ::GetFileAttributes(strPlatSrc);
+        if (attr != INVALID_FILE_ATTRIBUTES && (attr & FILE_ATTRIBUTE_DIRECTORY))
+        {
+            if (!CopyDirectoryRecursive(strPlatSrc, strDstBase + _T("\\") + strPlatFolder))
+                return FALSE;
+        }
+    }
+
+    return TRUE;
 }
 
 // ============================================================
@@ -754,39 +798,26 @@ BOOL CMdGenerator::CopyDirectoryRecursive(const CString& strSrcDir, const CStrin
 
 // ============================================================
 // 出力ディレクトリ構成のツリー文字列を生成する
-//   実際に出力する構成（CLAUDE.md / skills + サブフォルダ / .steering / tasks）を反映
+//   00-common/ と選択プラットフォームのフォルダのみ列挙する
 // ============================================================
-CString CMdGenerator::BuildDirectoryTree(const CString& strProjectName)
+CString CMdGenerator::BuildDirectoryTree(const CString& strProjectName, PlatformType pt)
 {
     CString strTop = strProjectName;
     if (strTop.IsEmpty()) strTop = _T("（プロジェクト名）");
 
+    CString strPlatFolder = GetPlatformSkillFolder(pt);
+
     CString t;
     t += strTop + _T("/\n");
     t += _T("├── CLAUDE.md\n");
-
-    // skills/（コピー元のサブフォルダを列挙）
-    std::vector<CString> subs;
-    CString strSrc = GetSkillsSourceDir();
-    if (!strSrc.IsEmpty())
-    {
-        CFileFind finder;
-        BOOL bWorking = finder.FindFile(strSrc + _T("\\*"));
-        while (bWorking)
-        {
-            bWorking = finder.FindNextFile();
-            if (finder.IsDots() || !finder.IsDirectory()) continue;
-            subs.push_back(finder.GetFileName());
-        }
-        finder.Close();
-    }
-
     t += _T("├── skills/\n");
-    for (size_t i = 0; i < subs.size(); ++i)
+    t += _T("│   ├── 00-common/\n");
+    t += _T("│   │   └── SKILL.md\n");
+
+    if (!strPlatFolder.IsEmpty())
     {
-        BOOL bLast = (i == subs.size() - 1);
-        t += _T("│   ") + CString(bLast ? _T("└── ") : _T("├── ")) + subs[i] + _T("/\n");
-        t += _T("│   ") + CString(bLast ? _T("    ") : _T("│   ")) + _T("└── SKILL.md\n");
+        t += _T("│   └── ") + strPlatFolder + _T("/\n");
+        t += _T("│       └── SKILL.md\n");
     }
 
     t += _T("├── .steering/\n");

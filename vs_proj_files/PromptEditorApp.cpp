@@ -15,6 +15,9 @@ BOOL CPromptEditorApp::InitInstance()
 {
     CWinApp::InitInstance();
 
+    // レジストリ保存先のキーを設定（HKEY_CURRENT_USER\Software\prompt_editor）
+    SetRegistryKey(_T("prompt_editor"));
+
     // Windowsのゴーストウィンドウ機能を無効化。
     // メッセージ処理が一時的に滞った際に、システムが本物に見える応答しないダミー
     // ウィンドウ（ゴースト）を作る挙動を抑止する。

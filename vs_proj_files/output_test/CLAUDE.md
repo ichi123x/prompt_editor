@@ -2,8 +2,8 @@
 
 ## プロジェクト概要
 
-- **プロジェクト名**：PROJECT Z
-- **目的**：ファイル検索ツール
+- **プロジェクト名**：PROJECT AA
+- **目的**：テストです。
 - **担当者**：ihira
 - **プラットフォーム**：C++ / MFC
 
@@ -24,20 +24,12 @@
 - ディレクトリ（skills/.steering/tasks）がない場合は新規作成する
 - ディレクトリ（skills/.steering/tasks）に該当するファイルがない場合、空で新規作成する
 ```
-PROJECT Z/
+PROJECT AA/
 ├── CLAUDE.md
 ├── skills/
 │   ├── 00-common/
 │   │   └── SKILL.md
-│   ├── 01-cs-winforms/
-│   │   └── SKILL.md
-│   ├── 02-cs-wpf/
-│   │   └── SKILL.md
-│   ├── 03-cpp-mfc/
-│   │   └── SKILL.md
-│   ├── 04-cpp-win32/
-│   │   └── SKILL.md
-│   └── 05-web/
+│   └── 03-cpp-mfc/
 │       └── SKILL.md
 ├── .steering/
 │   ├── product.md

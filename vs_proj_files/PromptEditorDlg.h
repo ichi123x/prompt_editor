@@ -88,6 +88,7 @@ private:
     friend class CPreviewDialog;
 
     // ---- イベントハンドラ ----
+    afx_msg void OnDestroy();                   // ダイアログ破棄時（設定保存）
     afx_msg void OnBnClickedBrowse();          // フォルダ参照ボタン
     afx_msg void OnBnClickedGenerate();        // 生成ボタン
     afx_msg void OnBnClickedClose();           // 閉じるボタン

@@ -87,14 +87,17 @@ private:
     // プラットフォーム別のコーディング規約を返す（CLAUDE.md用）
     CString GetCodingRules(PlatformType pt);
 
-    // 出力ディレクトリ構成のツリー文字列を生成（プロジェクト名をトップに）
-    CString BuildDirectoryTree(const CString& strProjectName);
+    // 出力ディレクトリ構成のツリー文字列を生成（プロジェクト名をトップに、選択プラットフォームのみ列挙）
+    CString BuildDirectoryTree(const CString& strProjectName, PlatformType pt);
 
     // コピー元 skills フォルダの場所を返す（exe隣→親へ遡って探索。無ければ空）
     CString GetSkillsSourceDir();
 
-    // skills フォルダを出力先へそのままコピーする
-    BOOL CopySkillsFolder(const CString& strBaseOut);
+    // プラットフォームに対応する skills サブフォルダ名を返す（例："03-cpp-mfc"）
+    CString GetPlatformSkillFolder(PlatformType pt);
+
+    // 選択プラットフォームの skills フォルダを出力先へコピーする（00-common + 選択プラットフォームのみ）
+    BOOL CopySkillsFolder(const CString& strBaseOut, PlatformType pt);
 
     // フォルダを再帰的にコピーする
     BOOL CopyDirectoryRecursive(const CString& strSrcDir, const CString& strDstDir);
