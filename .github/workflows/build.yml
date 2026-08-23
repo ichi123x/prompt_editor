@@ -1,0 +1,52 @@
+name: build
+
+# push / PR のたびに Debug と Release を自動ビルドする。
+# ランナーの windows-2022 イメージには VS2022 Enterprise + ATL/MFC が含まれるため、
+# ローカルと同じ build.ps1 をそのまま実行できる。
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# 同じブランチで新しい push があったら古い実行はキャンセルする
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: windows-2022
+    strategy:
+      fail-fast: false
+      matrix:
+        configuration: [Debug, Release]
+
+    steps:
+      - name: リポジトリを取得
+        uses: actions/checkout@v4
+
+      - name: ビルド (${{ matrix.configuration }})
+        shell: pwsh
+        run: |
+          Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
+          ./build.ps1 -Configuration ${{ matrix.configuration }}
+
+      - name: ビルドログを保存
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log-${{ matrix.configuration }}
+          path: build.log
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: 実行ファイルを保存
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prompt_editor-${{ matrix.configuration }}
+          path: x64/${{ matrix.configuration }}/prompt_editor.exe
+          if-no-files-found: error
+          retention-days: 14

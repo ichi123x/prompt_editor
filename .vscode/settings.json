@@ -1,0 +1,51 @@
+{
+  // ---- 文字コード（このプロジェクトの規約）----
+  "files.eol": "\r\n",
+  "files.encoding": "utf8",
+  "[cpp]": { "files.encoding": "utf8bom" },
+  "[c]": { "files.encoding": "utf8bom" },
+  "[powershell]": { "files.encoding": "utf8bom" },
+
+  // ---- MFC リソースは編集禁止（読み取り専用にして事故を防ぐ）----
+  "files.readonlyInclude": {
+    "**/*.rc": true,
+    "**/*.rc2": true,
+    "**/*.aps": true,
+    "**/resource.h": true
+  },
+  "files.associations": {
+    "*.rc": "cpp",
+    "*.rc2": "cpp"
+  },
+
+  // ---- ノイズになるフォルダを隠す ----
+  "files.exclude": {
+    "**/.vs": true,
+    "**/x64": true
+  },
+  "search.exclude": {
+    "**/.vs": true,
+    "**/x64": true,
+    "**/build.log": true
+  },
+  "files.watcherExclude": {
+    "**/.vs/**": true,
+    "**/x64/**": true
+  },
+
+  // ---- IntelliSense (C/C++ 拡張) ----
+  "C_Cpp.default.cppStandard": "c++17",
+  "C_Cpp.default.cStandard": "c17",
+  "C_Cpp.default.intelliSenseMode": "windows-msvc-x64",
+  "C_Cpp.default.defines": [
+    "_WINDOWS",
+    "UNICODE",
+    "_UNICODE",
+    "_AFXDLL",
+    "_DEBUG"
+  ],
+
+  // ---- その他 ----
+  "editor.renderWhitespace": "boundary",
+  "files.trimTrailingWhitespace": false
+}
