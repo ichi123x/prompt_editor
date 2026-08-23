@@ -1,6 +1,6 @@
 name: build
 
-# push / PR のたびに Debug と Release を自動ビルドする。
+# push / PR のたびに Debug と Release をビルドし、単体テストを実行する。
 # ランナーの windows-2022 イメージには VS2022 Enterprise + ATL/MFC が含まれるため、
 # ローカルと同じ build.ps1 をそのまま実行できる。
 on:
@@ -32,6 +32,12 @@ jobs:
         run: |
           Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
           ./build.ps1 -Configuration ${{ matrix.configuration }}
+
+      - name: 単体テスト (${{ matrix.configuration }})
+        shell: pwsh
+        run: |
+          Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
+          ./build.ps1 -Configuration ${{ matrix.configuration }} -Test
 
       - name: ビルドログを保存
         if: always()

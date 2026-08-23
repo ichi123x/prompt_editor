@@ -55,3 +55,10 @@ ipch/
 # レイアウト・バックアップ
 DocumentLayout.json
 DocumentLayout.backup.json
+
+# ===== Claude Code =====
+# 個人のローカル権限設定（プロジェクト共有設定は .claude/settings.json）
+.claude/settings.local.json
+
+# ===== ビルドスクリプトの出力 =====
+build.log

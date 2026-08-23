@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    prompt_editor を Visual Studio 2022 (v143) 固定でビルドします。
+    prompt_editor を Visual Studio 2022 (v143) 固定でビルド／テストします。
 
 .DESCRIPTION
     このPCには VS2022 Professional と VS2026 Community が併存しています。
@@ -11,10 +11,11 @@
     ビルドログは build.log に UTF-8 で出力されるので、AI が読んで自己修正できます。
 
 .EXAMPLE
-    .\build.ps1
+    .\build.ps1                      # Debug ビルド
     .\build.ps1 -Configuration Release
     .\build.ps1 -Target Rebuild
-    .\build.ps1 -Run                    # ビルド成功後に exe を起動
+    .\build.ps1 -Test                # ビルド後に単体テストを実行
+    .\build.ps1 -Run                 # ビルド後に exe を起動
 #>
 [CmdletBinding()]
 param(
@@ -23,6 +24,9 @@ param(
 
     [ValidateSet('Build', 'Rebuild', 'Clean')]
     [string]$Target = 'Build',
+
+    # ビルド成功後に単体テスト (Microsoft Native Unit Test) を実行する
+    [switch]$Test,
 
     # ビルド成功後に生成された exe を起動する
     [switch]$Run,
@@ -130,19 +134,54 @@ if ($exitCode -eq 0) {
     exit $exitCode
 }
 
-# ---------------------------------------------------------------
-# 4. 実行（-Run 指定時のみ）
-# ---------------------------------------------------------------
-$exe = Join-Path $root "$Platform\$Configuration\prompt_editor.exe"
+$outDir = Join-Path $root "$Platform\$Configuration"
+$exe    = Join-Path $outDir 'prompt_editor.exe'
 if (Test-Path -LiteralPath $exe) {
     Write-Host "  出力: $exe" -ForegroundColor Green
-    if ($Run) {
-        Write-Host '  起動します...' -ForegroundColor Green
-        Start-Process -FilePath $exe
-    }
-} else {
-    Write-Warning "ビルドは成功しましたが exe が見つかりません: $exe"
 }
 Write-Host ''
+
+# ---------------------------------------------------------------
+# 4. テスト実行（-Test 指定時のみ）
+# ---------------------------------------------------------------
+if ($Test) {
+    $vstest = Join-Path $vsPath 'Common7\IDE\CommonExtensions\Microsoft\TestWindow\vstest.console.exe'
+    if (-not (Test-Path -LiteralPath $vstest)) {
+        throw "vstest.console.exe が見つかりません: $vstest"
+    }
+
+    $testDll = Join-Path $outDir 'prompt_editor.tests.dll'
+    if (-not (Test-Path -LiteralPath $testDll)) {
+        throw "テストDLLが見つかりません: $testDll`nテストプロジェクトがビルドされていない可能性があります。"
+    }
+
+    Write-Host "  テスト実行: $testDll" -ForegroundColor Cyan
+    Write-Host ''
+
+    & $vstest $testDll '/Platform:x64' '/Logger:console;verbosity=normal'
+    $testExit = $LASTEXITCODE
+
+    Write-Host ''
+    if ($testExit -eq 0) {
+        Write-Host '  TESTS PASSED' -ForegroundColor Green
+    } else {
+        Write-Host "  TESTS FAILED (exit code $testExit)" -ForegroundColor Red
+        Write-Host ''
+        exit $testExit
+    }
+    Write-Host ''
+}
+
+# ---------------------------------------------------------------
+# 5. 実行（-Run 指定時のみ）
+# ---------------------------------------------------------------
+if ($Run) {
+    if (Test-Path -LiteralPath $exe) {
+        Write-Host '  起動します...' -ForegroundColor Green
+        Start-Process -FilePath $exe
+    } else {
+        Write-Warning "exe が見つかりません: $exe"
+    }
+}
 
 exit 0

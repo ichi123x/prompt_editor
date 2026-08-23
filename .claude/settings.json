@@ -1,0 +1,25 @@
+﻿{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(powershell.exe -ExecutionPolicy Bypass -File ./build.ps1:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git show:*)",
+      "Bash(git branch:*)",
+      "Bash(git add:*)",
+      "Bash(git restore:*)",
+      "Bash(gh pr view:*)",
+      "Bash(gh pr list:*)",
+      "Bash(gh run list:*)",
+      "Bash(gh run view:*)"
+    ],
+    "deny": [
+      "Read(./.vs/**)",
+      "Read(./x64/**)",
+      "Edit(./vs_proj_files/prompt_editor.rc)",
+      "Edit(./vs_proj_files/resource.h)"
+    ]
+  }
+}

@@ -153,3 +153,36 @@ prompt_editor/
 - VS Code の既定は「BOMなし UTF-8」なので、.ps1 を編集・新規作成したら
   右下のエンコーディング表示 →「Save with Encoding」→「UTF-8 with BOM」を必ず確認する
 - 改行は CRLF に揃える
+
+---
+
+## テスト
+
+テストフレームワークは **Microsoft Native Unit Test**（VS2022 同梱）。追加インストールは不要。
+
+```powershell
+.\build.ps1 -Test                        # Debug をビルドしてテスト実行
+.\build.ps1 -Configuration Release -Test  # Release でテスト実行
+```
+
+VS Code では `Ctrl+Shift+P` →「Tasks: Run Test Task」でも実行できる。
+
+### 構成
+
+| 場所 | 内容 |
+|------|------|
+| `tests/prompt_editor.tests.vcxproj` | テストDLL（MFC共有DLL・v143・x64） |
+| `tests/MdGeneratorTests.cpp` | `CMdGenerator` のテスト |
+
+- テストプロジェクトは本体の `.cpp` を**直接取り込んでコンパイル**する（ライブラリ化不要）
+- プリコンパイル済みヘッダは使わない（`PrecompiledHeader=NotUsing`）
+- テスト対象の .cpp を増やす場合は `tests/prompt_editor.tests.vcxproj` の `ItemGroup` に
+  `<ClCompile Include="..\vs_proj_files\XXX.cpp" />` を追加する
+
+### テストを書くときの方針
+
+- **UI（`CDialog` / `CWinApp` 派生）に依存しないロジックだけをテストする**
+- リソース（`FindResource` / `LoadResource`）を使う関数はテストDLL単体では動かない。
+  例：`GeneratePreview(data, 0)` は `IDR_CLAUDE_TEMPLATE` を読むため対象外
+- 新機能を実装するときは、**まずロジックを UI から切り離してからテストを書く**
+- テストメソッド名は ASCII（日本語識別子は使わない）。説明は Assert の第2引数に日本語で書く
